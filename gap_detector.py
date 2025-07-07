@@ -130,11 +130,18 @@ class GapDetector:
                         ))
                     else:
                         # Check for gaps from last data to present
-                        # Parse date string, handling potential time components
-                        if ' ' in last_price_date:
-                            last_date = datetime.strptime(last_price_date.split(' ')[0], '%Y-%m-%d').date()
+                        # Handle both date objects and string dates
+                        if isinstance(last_price_date, date):
+                            last_date = last_price_date
+                        elif isinstance(last_price_date, str):
+                            # Parse date string, handling potential time components
+                            if ' ' in last_price_date:
+                                last_date = datetime.strptime(last_price_date.split(' ')[0], '%Y-%m-%d').date()
+                            else:
+                                last_date = datetime.strptime(last_price_date, '%Y-%m-%d').date()
                         else:
-                            last_date = datetime.strptime(last_price_date, '%Y-%m-%d').date()
+                            # If it's a datetime object, convert to date
+                            last_date = last_price_date.date() if hasattr(last_price_date, 'date') else date.today()
                         today = date.today()
                         
                         # Only consider it a gap if it's more than 1 business day old
