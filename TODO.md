@@ -4,11 +4,11 @@ This file tracks tasks, improvements, and new features for the Stock Analyst app
 
 ## ❗️ Fixes
 
-- [ ] **Inconsistent Database Access:** Refactor `auth.py` and `portfolio.py` to use `DatabaseManager` and `StockDataService` instead of direct SQLite connections. This will centralize database logic and support PostgreSQL seamlessly. SQLite code should be removed.
-- [ ] **Hardcoded Market Holidays:** In `gap_detector.py`, move the `market_holidays_2024` list to `unified_config.py` to make it configurable and easier to update annually. Update it to 2025.
-- [ ] **Default Secret Key:** In `app.py`, add a check to ensure the `SECRET_KEY` is not the default value in a production environment and log a warning if it is.
-- [ ] **Fix `datetime.date` iteration error in `gap_detector.py`:** The `CLAUDE.md` file mentions a known issue with `datetime.date` iteration. Investigate and fix this bug.
-- [ ] **Remove placeholder** The `export_transactions` route in `app.py` has a placeholder for PDF export. Remove it.
+- [x] **Inconsistent Database Access:** Refactor `auth.py` and `portfolio.py` to use `DatabaseManager` and `StockDataService` instead of direct SQLite connections. This will centralize database logic and support PostgreSQL seamlessly. SQLite code should be removed. ✅ **COMPLETED** - Refactored both AuthenticationManager and PortfolioManager to use centralized DatabaseManager, removed SQLite-specific code.
+- [x] **Hardcoded Market Holidays:** In `gap_detector.py`, move the `market_holidays_2024` list to `unified_config.py` to make it configurable and easier to update annually. Update it to 2025. ✅ **COMPLETED** - Added MARKET_HOLIDAYS_2025 to unified_config.py with helper method, updated GapDetector to use centralized config.
+- [x] **Default Secret Key:** In `app.py`, add a check to ensure the `SECRET_KEY` is not the default value in a production environment and log a warning if it is. ✅ **COMPLETED** - Added security warning for default secret keys in production environment.
+- [x] **Fix `datetime.date` iteration error in `gap_detector.py`:** The `CLAUDE.md` file mentions a known issue with `datetime.date` iteration. Investigate and fix this bug. ✅ **COMPLETED** - Fixed by adding proper type checking before using 'in' operator on date objects.
+- [x] **Remove placeholder** The `export_transactions` route in `app.py` has a placeholder for PDF export. Remove it. ✅ **COMPLETED** - Replaced placeholder with proper handling that redirects unsupported formats to CSV.
 
 ##  улуч Improvements
 
