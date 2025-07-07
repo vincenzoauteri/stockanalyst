@@ -26,7 +26,7 @@ try:
     from fmp_client import FMPClient
     from yahoo_finance_client import YahooFinanceClient
     from gap_detector import GapDetector
-    from logging_config import setup_logging
+    from logging_config import setup_logging, log_background_task, get_background_logger
 except ImportError as e:
     print(f"Error: Failed to import local modules. Details: {e}")
     sys.exit(1)
@@ -111,32 +111,56 @@ class Scheduler:
         self._running = False
 
     def run_daily_update(self):
+        start_time = time.time()
+        log_background_task("Daily Update", "STARTED")
         logger.info("Starting scheduled full daily update...")
+        
         try:
             success = self.daily_updater.run_daily_update()
+            duration = time.time() - start_time
+            
             if success:
                 self.status["last_successful_update"] = datetime.now().isoformat()
                 self.status["consecutive_failures"] = 0
+                log_background_task("Daily Update", "COMPLETED", duration=duration)
                 logger.info("Full daily update completed successfully.")
             else:
                 self.status["consecutive_failures"] += 1
+                log_background_task("Daily Update", "COMPLETED", duration=duration, 
+                                  details="Some failures occurred")
                 logger.warning("Full daily update completed with failures.")
         except Exception as e:
+            duration = time.time() - start_time
             self.status["consecutive_failures"] += 1
+            log_background_task("Daily Update", "FAILED", duration=duration, 
+                              details=str(e))
             logger.error(f"An exception occurred during the daily update: {e}", exc_info=True)
         finally:
             self._save_status()
 
     def run_health_check(self):
+        start_time = time.time()
+        log_background_task("Health Check", "STARTED")
         logger.info("Running periodic health check...")
+        
         try:
             gaps_summary = self.gap_detector.detect_all_gaps()
             total_gaps = sum(len(gaps) for gaps in gaps_summary.values())
+            duration = time.time() - start_time
+            
             if total_gaps > 0:
+                gap_details = ", ".join([f"{k}: {len(v)}" for k, v in gaps_summary.items() if v])
+                log_background_task("Health Check", "COMPLETED", duration=duration, 
+                                  details=f"Found {total_gaps} gaps - {gap_details}")
                 logger.warning(f"Health Check: Found {total_gaps} data gaps.")
             else:
+                log_background_task("Health Check", "COMPLETED", duration=duration, 
+                                  details="No gaps found")
                 logger.info("Health Check: No data gaps found.")
         except Exception as e:
+            duration = time.time() - start_time
+            log_background_task("Health Check", "FAILED", duration=duration, 
+                              details=str(e))
             logger.error(f"An exception occurred during the health check: {e}", exc_info=True)
         finally:
             self._save_status()

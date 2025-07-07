@@ -92,6 +92,22 @@ def setup_logging(
         api_logger.addHandler(api_handler)
         api_logger.setLevel(logging.INFO)
         api_logger.propagate = False  # Don't propagate to root logger
+        
+        # Background tasks log
+        bg_log_file = os.path.join(log_dir, 'background_tasks.log')
+        bg_handler = logging.handlers.RotatingFileHandler(
+            bg_log_file,
+            maxBytes=max_file_size,
+            backupCount=backup_count
+        )
+        bg_handler.setLevel(logging.INFO)
+        bg_handler.setFormatter(formatter)
+        
+        # Create background tasks logger
+        bg_logger = logging.getLogger('background_tasks')
+        bg_logger.addHandler(bg_handler)
+        bg_logger.setLevel(logging.INFO)
+        bg_logger.propagate = False  # Don't propagate to root logger
     
     # Set specific logger levels for third-party libraries
     logging.getLogger('urllib3').setLevel(logging.WARNING)
@@ -158,3 +174,39 @@ def log_api_request(endpoint: str, symbol: str = None, status: str = "SUCCESS",
         api_logger.info(f"API Request: {endpoint} {symbol or ''} - {status} ({response_time:.3f}s)")
     else:
         api_logger.error(f"API Request: {endpoint} {symbol or ''} - {status} - {error}")
+
+def log_background_task(task_name: str, status: str, duration: float = None, 
+                       symbols_processed: int = None, details: str = None):
+    """
+    Log background task execution details
+    
+    Args:
+        task_name: Name of the background task
+        status: Task status (STARTED, COMPLETED, FAILED, etc.)
+        duration: Task duration in seconds
+        symbols_processed: Number of symbols processed
+        details: Additional details or error message
+    """
+    bg_logger = logging.getLogger('background_tasks')
+    
+    context_parts = [f"Task: {task_name}", f"Status: {status}"]
+    
+    if duration is not None:
+        context_parts.append(f"Duration: {duration:.2f}s")
+    if symbols_processed is not None:
+        context_parts.append(f"Symbols: {symbols_processed}")
+    if details:
+        context_parts.append(f"Details: {details}")
+    
+    log_message = " | ".join(context_parts)
+    
+    if status in ["STARTED", "COMPLETED"]:
+        bg_logger.info(log_message)
+    elif status in ["FAILED", "ERROR"]:
+        bg_logger.error(log_message)
+    else:
+        bg_logger.info(log_message)
+
+def get_background_logger():
+    """Get the background tasks logger"""
+    return logging.getLogger('background_tasks')
