@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}Analyst Recommendations - {{ symbol }} - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-users me-2"></i>Analyst Recommendations - {{ symbol }}</h1>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="refreshData()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                    <a href="{{ url_for('stock_detail', symbol=symbol) }}" class="btn btn-outline-info">
+                        <i class="fas fa-arrow-left me-1"></i>Back to {{ symbol }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if recommendations %}
+    <!-- Current Recommendations Summary -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Current Consensus (This Month)</h5>
+                </div>
+                <div class="card-body">
+                    {% set current = recommendations[0] if recommendations else {} %}
+                    {% if current %}
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="row text-center">
+                                <div class="col">
+                                    <div class="card border-success">
+                                        <div class="card-body">
+                                            <h3 class="text-success">{{ current.strong_buy or 0 }}</h3>
+                                            <p class="mb-0">Strong Buy</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <div class="card border-success">
+                                        <div class="card-body">
+                                            <h3 class="text-success">{{ current.buy or 0 }}</h3>
+                                            <p class="mb-0">Buy</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <div class="card border-warning">
+                                        <div class="card-body">
+                                            <h3 class="text-warning">{{ current.hold or 0 }}</h3>
+                                            <p class="mb-0">Hold</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <div class="card border-danger">
+                                        <div class="card-body">
+                                            <h3 class="text-danger">{{ current.sell or 0 }}</h3>
+                                            <p class="mb-0">Sell</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col">
+                                    <div class="card border-danger">
+                                        <div class="card-body">
+                                            <h3 class="text-danger">{{ current.strong_sell or 0 }}</h3>
+                                            <p class="mb-0">Strong Sell</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-3 text-center">
+                                <p class="mb-0"><strong>Total Analysts: {{ current.total_analysts or 0 }}</strong></p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <canvas id="recommendationChart" width="300" height="300"></canvas>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendation Trend -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recommendation Trend</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Period</th>
+                                    <th class="text-center">Strong Buy</th>
+                                    <th class="text-center">Buy</th>
+                                    <th class="text-center">Hold</th>
+                                    <th class="text-center">Sell</th>
+                                    <th class="text-center">Strong Sell</th>
+                                    <th class="text-center">Total Analysts</th>
+                                    <th class="text-center">Consensus</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rec in recommendations %}
+                                <tr>
+                                    <td>
+                                        {% if rec.period == '0m' %}
+                                            <span class="badge bg-primary">Current Month</span>
+                                        {% elif rec.period == '-1m' %}
+                                            <span class="badge bg-secondary">Last Month</span>
+                                        {% elif rec.period == '-2m' %}
+                                            <span class="badge bg-secondary">2 Months Ago</span>
+                                        {% elif rec.period == '-3m' %}
+                                            <span class="badge bg-secondary">3 Months Ago</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">{{ rec.period }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ rec.strong_buy or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ rec.buy or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning">{{ rec.hold or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger">{{ rec.sell or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger">{{ rec.strong_sell or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <strong>{{ rec.total_analysts or 0 }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        {% set positive = (rec.strong_buy or 0) + (rec.buy or 0) %}
+                                        {% set negative = (rec.sell or 0) + (rec.strong_sell or 0) %}
+                                        {% set neutral = rec.hold or 0 %}
+                                        {% set total = rec.total_analysts or 0 %}
+                                        
+                                        {% if total > 0 %}
+                                            {% if positive > negative and positive > neutral %}
+                                                <span class="badge bg-success">Buy</span>
+                                            {% elif negative > positive and negative > neutral %}
+                                                <span class="badge bg-danger">Sell</span>
+                                            {% else %}
+                                                <span class="badge bg-warning">Hold</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendation Trends Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recommendation Trends Over Time</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="trendChart" width="800" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% elif data_availability and data_availability.get('analyst_recommendations') == 'Data Unavailable' %}
+    <!-- Data Unavailable -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>Data Unavailable:</strong> Analyst recommendation data is not available for {{ symbol }}.
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- No Data Available -->
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>No analyst recommendation data available for {{ symbol }}.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {% if recommendations %}
+    // Current month recommendation pie chart
+    const currentRec = {{ recommendations[0]|tojson if recommendations else '{}' }};
+    
+    if (currentRec && currentRec.total_analysts > 0) {
+        const ctx1 = document.getElementById('recommendationChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: ['Strong Buy', 'Buy', 'Hold', 'Sell', 'Strong Sell'],
+                datasets: [{
+                    data: [
+                        currentRec.strong_buy || 0,
+                        currentRec.buy || 0,
+                        currentRec.hold || 0,
+                        currentRec.sell || 0,
+                        currentRec.strong_sell || 0
+                    ],
+                    backgroundColor: [
+                        '#28a745',
+                        '#6f42c1',
+                        '#ffc107',
+                        '#fd7e14',
+                        '#dc3545'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    // Trend chart
+    const recommendations = {{ recommendations|tojson }};
+    if (recommendations && recommendations.length > 0) {
+        const ctx2 = document.getElementById('trendChart').getContext('2d');
+        
+        const periods = recommendations.map(r => {
+            if (r.period === '0m') return 'Current';
+            if (r.period === '-1m') return '1M Ago';
+            if (r.period === '-2m') return '2M Ago';
+            if (r.period === '-3m') return '3M Ago';
+            return r.period;
+        }).reverse();
+        
+        const strongBuyData = recommendations.map(r => r.strong_buy || 0).reverse();
+        const buyData = recommendations.map(r => r.buy || 0).reverse();
+        const holdData = recommendations.map(r => r.hold || 0).reverse();
+        const sellData = recommendations.map(r => r.sell || 0).reverse();
+        const strongSellData = recommendations.map(r => r.strong_sell || 0).reverse();
+        
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: periods,
+                datasets: [
+                    {
+                        label: 'Strong Buy',
+                        data: strongBuyData,
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Buy',
+                        data: buyData,
+                        borderColor: '#6f42c1',
+                        backgroundColor: 'rgba(111, 66, 193, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Hold',
+                        data: holdData,
+                        borderColor: '#ffc107',
+                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Sell',
+                        data: sellData,
+                        borderColor: '#fd7e14',
+                        backgroundColor: 'rgba(253, 126, 20, 0.1)',
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Strong Sell',
+                        data: strongSellData,
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Analysts'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time Period'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+});
+
+function refreshData() {
+    location.reload();
+}
+</script>
+{% endblock %}

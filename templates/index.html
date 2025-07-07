@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}S&P 500 Stocks - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 mb-0">
+            <i class="fas fa-chart-line text-primary me-2"></i>
+            S&P 500 Stock Analysis
+        </h1>
+        <p class="lead text-muted">Comprehensive analysis of S&P 500 companies with real-time data</p>
+    </div>
+</div>
+
+
+<!-- Search and Filter -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Search stocks by symbol or company name...">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="sectorFilter">
+            <option value="">All Sectors</option>
+            {% for sector in stats.sectors %}
+            <option value="{{ sector }}">{{ sector }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="profileFilter">
+            <option value="">All Stocks</option>
+            <option value="with_profile">With Profiles Only</option>
+            <option value="no_profile">No Profile Data</option>
+        </select>
+    </div>
+</div>
+
+<!-- Undervaluation Controls -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-outline-primary" id="calculateBtn">
+                <i class="fas fa-calculator me-2"></i>Calculate Undervaluation
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="sortToggleBtn" data-sort="desc">
+                <i class="fas fa-sort-amount-down me-2"></i>Most Undervalued First
+            </button>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="alert alert-info py-2" role="alert" style="display: none;" id="calculationStatus">
+            <i class="fas fa-info-circle me-2"></i>
+            <span id="statusMessage">Ready to calculate undervaluation scores</span>
+        </div>
+    </div>
+</div>
+
+<!-- Stock List -->
+<div class="card" id="stockList">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Stock List
+            <span class="badge bg-secondary ms-2" id="stockCount">{{ stocks|length }}</span>
+        </h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" width="8%">Symbol</th>
+                        <th scope="col" width="20%">Company Name</th>
+                        <th scope="col" width="12%">Sector</th>
+                        <th scope="col" width="12%">Sub-Sector</th>
+                        <th scope="col" width="8%">Price</th>
+                        <th scope="col" width="10%">Market Cap</th>
+                        <th scope="col" width="12%">
+                            <span class="text-nowrap">
+                                <i class="fas fa-chart-bar me-1"></i>Undervaluation Score
+                            </span>
+                        </th>
+                        <th scope="col" width="8%">Profile</th>
+                        <th scope="col" width="5%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stock in stocks %}
+                    <tr class="stock-item" 
+                        data-symbol="{{ stock.symbol }}" 
+                        data-name="{{ stock.company_name|lower }}" 
+                        data-sector="{{ stock.sector or '' }}"
+                        data-has-profile="{{ stock.has_profile }}"
+                        data-undervaluation-score="{{ stock.undervaluation_score or 0 }}"
+                        data-data-quality="{{ stock.data_quality or 'insufficient' }}">
+                        <td>
+                            <span class="fw-bold text-primary">{{ stock.symbol }}</span>
+                            <i class="fas fa-chevron-right text-muted ms-2" style="font-size: 0.8rem;"></i>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div>
+                                    <div class="fw-medium">{{ stock.company_name }}</div>
+                                    {% if stock.headquarters_location %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-map-marker-alt me-1"></i>{{ stock.headquarters_location }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if stock.sector %}
+                            <span class="badge bg-primary">{{ stock.sector }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if stock.sub_sector %}
+                            <span class="badge bg-info">{{ stock.sub_sector }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if stock.price %}
+                            <span class="fw-bold">${{ "%.2f"|format(stock.price) }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if stock.market_cap %}
+                            <span class="fw-medium">${{ "%.1fB"|format(stock.market_cap / 1000000000) }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if stock.undervaluation_score %}
+                                {% set score = stock.undervaluation_score %}
+                                {% if score >= 80 %}
+                                    <span class="badge bg-success fs-6">{{ "%.1f"|format(score) }}</span>
+                                    <br><small class="text-success">Highly Undervalued</small>
+                                {% elif score >= 60 %}
+                                    <span class="badge bg-warning fs-6">{{ "%.1f"|format(score) }}</span>
+                                    <br><small class="text-warning">Moderately Undervalued</small>
+                                {% elif score >= 40 %}
+                                    <span class="badge bg-info fs-6">{{ "%.1f"|format(score) }}</span>
+                                    <br><small class="text-info">Fairly Valued</small>
+                                {% else %}
+                                    <span class="badge bg-danger fs-6">{{ "%.1f"|format(score) }}</span>
+                                    <br><small class="text-danger">Overvalued</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">N/A</span>
+                                <br><small class="text-muted">Insufficient Data</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if stock.has_profile %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-check-circle"></i> Yes
+                            </span>
+                            {% else %}
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-minus-circle"></i> No
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" 
+                               class="btn btn-outline-primary btn-sm"
+                               title="View Details">
+                                <i class="fas fa-chart-line"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- No Results Message -->
+<div id="noResults" class="text-center py-5" style="display: none;">
+    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+    <h4 class="text-muted">No stocks found</h4>
+    <p class="text-muted">Try adjusting your search criteria</p>
+</div>
+
+<!-- Loading Indicator -->
+<div id="loadingIndicator" class="text-center py-5" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="text-muted mt-2">Loading stock data...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Search and filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const sectorFilter = document.getElementById('sectorFilter');
+    const profileFilter = document.getElementById('profileFilter');
+    const calculateBtn = document.getElementById('calculateBtn');
+    const sortToggleBtn = document.getElementById('sortToggleBtn');
+    const calculationStatus = document.getElementById('calculationStatus');
+    const statusMessage = document.getElementById('statusMessage');
+    let stockItems = document.querySelectorAll('.stock-item');
+    const noResults = document.getElementById('noResults');
+
+    // Undervaluation calculation functionality
+    calculateBtn.addEventListener('click', function() {
+        calculationStatus.style.display = '';
+        statusMessage.textContent = 'Calculating undervaluation scores...';
+        calculationStatus.className = 'alert alert-info py-2';
+        
+        fetch('/api/analysis/run', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                const summary = data.summary;
+                statusMessage.textContent = `Analysis complete! Analyzed ${summary.analyzed_stocks} stocks, found ${summary.highly_undervalued} highly undervalued.`;
+                calculationStatus.className = 'alert alert-success py-2';
+                
+                // Reload page to show updated scores
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            })
+            .catch(error => {
+                statusMessage.textContent = `Error: ${error.message}`;
+                calculationStatus.className = 'alert alert-danger py-2';
+            });
+    });
+
+    // Sort toggle functionality
+    sortToggleBtn.addEventListener('click', function() {
+        const currentSort = this.dataset.sort;
+        const newSort = currentSort === 'desc' ? 'asc' : 'desc';
+        
+        this.dataset.sort = newSort;
+        if (newSort === 'desc') {
+            this.innerHTML = '<i class="fas fa-sort-amount-down me-2"></i>Most Undervalued First';
+        } else {
+            this.innerHTML = '<i class="fas fa-sort-amount-up me-2"></i>Most Overvalued First';
+        }
+        
+        sortStocksByUndervaluation(newSort);
+    });
+
+    function sortStocksByUndervaluation(order = 'desc') {
+        const tbody = document.querySelector('#stockList tbody');
+        const rows = Array.from(stockItems);
+        
+        rows.sort((a, b) => {
+            const scoreA = parseFloat(a.dataset.undervaluationScore) || -1;
+            const scoreB = parseFloat(b.dataset.undervaluationScore) || -1;
+            const qualityA = a.dataset.dataQuality;
+            const qualityB = b.dataset.dataQuality;
+            
+            // Always put insufficient data at the bottom
+            if (qualityA === 'insufficient' && qualityB !== 'insufficient') return 1;
+            if (qualityA !== 'insufficient' && qualityB === 'insufficient') return -1;
+            if (qualityA === 'insufficient' && qualityB === 'insufficient') {
+                return a.dataset.symbol.localeCompare(b.dataset.symbol);
+            }
+            
+            // Sort by score
+            if (order === 'desc') {
+                return scoreB - scoreA;
+            } else {
+                return scoreA - scoreB;
+            }
+        });
+        
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+        
+        // Update stockItems reference
+        stockItems = document.querySelectorAll('.stock-item');
+    }
+
+    function filterStocks() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedSector = sectorFilter.value;
+        const selectedProfile = profileFilter.value;
+        
+        let visibleCount = 0;
+
+        stockItems.forEach(item => {
+            const symbol = item.dataset.symbol.toLowerCase();
+            const name = item.dataset.name;
+            const sector = item.dataset.sector;
+            const hasProfile = item.dataset.hasProfile === '1';
+
+            let visible = true;
+
+            // Search filter
+            if (searchTerm && !symbol.includes(searchTerm) && !name.includes(searchTerm)) {
+                visible = false;
+            }
+
+            // Sector filter
+            if (selectedSector && sector !== selectedSector) {
+                visible = false;
+            }
+
+            // Profile filter
+            if (selectedProfile === 'with_profile' && !hasProfile) {
+                visible = false;
+            } else if (selectedProfile === 'no_profile' && hasProfile) {
+                visible = false;
+            }
+
+            if (visible) {
+                item.style.display = '';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // Update stock count
+        const stockCount = document.getElementById('stockCount');
+        if (stockCount) {
+            stockCount.textContent = visibleCount;
+        }
+
+        // Show/hide no results message
+        noResults.style.display = visibleCount === 0 ? '' : 'none';
+        
+        // Hide table header if no results
+        const tableContainer = document.querySelector('#stockList .table-responsive');
+        if (tableContainer) {
+            tableContainer.style.display = visibleCount === 0 ? 'none' : '';
+        }
+    }
+
+    // Attach event listeners
+    searchInput.addEventListener('input', filterStocks);
+    sectorFilter.addEventListener('change', filterStocks);
+    profileFilter.addEventListener('change', filterStocks);
+
+    // Add table row interactions and click functionality
+    stockItems.forEach(item => {
+        const symbol = item.dataset.symbol;
+        const detailUrl = `/stock/${symbol}`;
+        
+        // Make entire row clickable
+        item.style.cursor = 'pointer';
+        item.addEventListener('click', function(e) {
+            // Don't trigger if clicking on the action button
+            if (!e.target.closest('.btn')) {
+                window.location.href = detailUrl;
+            }
+        });
+        
+        item.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = '#f8f9fa';
+        });
+        
+        item.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = '';
+        });
+    });
+});
+
+// Auto-refresh market data every 5 minutes
+setInterval(function() {
+    // Could implement real-time price updates here
+    console.log('Auto-refresh triggered');
+}, 300000);
+</script>
+{% endblock %}

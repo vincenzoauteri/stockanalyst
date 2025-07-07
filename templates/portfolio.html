@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}My Portfolio - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-briefcase me-2"></i>My Portfolio</h2>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addTransactionModal">
+                <i class="fas fa-plus me-2"></i>Add Transaction
+            </button>
+        </div>
+        
+        {% if portfolio.holdings %}
+            <!-- Portfolio Summary -->
+            <div class="row mb-4">
+                <div class="col-md-3 mb-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Total Value</h5>
+                            <h3>${{ "%.2f"|format(portfolio.summary.total_value) }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card bg-secondary text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Total Cost</h5>
+                            <h3>${{ "%.2f"|format(portfolio.summary.total_cost) }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card {% if portfolio.summary.total_gain_loss >= 0 %}bg-success{% else %}bg-danger{% endif %} text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Total Gain/Loss</h5>
+                            <h3>{{ "+" if portfolio.summary.total_gain_loss >= 0 else "" }}${{ "%.2f"|format(portfolio.summary.total_gain_loss) }}</h3>
+                            <p class="mb-0">{{ "+" if portfolio.summary.total_gain_loss_pct >= 0 else "" }}{{ "%.2f"|format(portfolio.summary.total_gain_loss_pct) }}%</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">Holdings</h5>
+                            <h3>{{ portfolio.summary.total_holdings }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Holdings Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Holdings</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Company</th>
+                                    <th>Shares</th>
+                                    <th>Avg Cost</th>
+                                    <th>Current Price</th>
+                                    <th>Cost Basis</th>
+                                    <th>Current Value</th>
+                                    <th>Gain/Loss</th>
+                                    <th>%</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for holding in portfolio.holdings %}
+                                    <tr>
+                                        <td>
+                                            <a href="{{ url_for('stock_detail', symbol=holding.symbol) }}" class="text-decoration-none fw-bold">
+                                                {{ holding.symbol }}
+                                            </a>
+                                            {% if holding.sector %}
+                                                <br><small class="text-muted">{{ holding.sector }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ holding.company_name }}</td>
+                                        <td>{{ "%.2f"|format(holding.shares) }}</td>
+                                        <td>${{ "%.2f"|format(holding.purchase_price) }}</td>
+                                        <td>${{ "%.2f"|format(holding.current_price) }}</td>
+                                        <td>${{ "%.2f"|format(holding.cost_basis) }}</td>
+                                        <td>${{ "%.2f"|format(holding.current_value) }}</td>
+                                        <td class="{% if holding.gain_loss >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {{ "+" if holding.gain_loss >= 0 else "" }}${{ "%.2f"|format(holding.gain_loss) }}
+                                        </td>
+                                        <td class="{% if holding.gain_loss_pct >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                            {{ "+" if holding.gain_loss_pct >= 0 else "" }}{{ "%.2f"|format(holding.gain_loss_pct) }}%
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button class="btn btn-outline-primary" 
+                                                        onclick="sellStock('{{ holding.symbol }}', {{ holding.shares }}, {{ holding.current_price }})"
+                                                        title="Sell">
+                                                    <i class="fas fa-minus"></i>
+                                                </button>
+                                                <button class="btn btn-outline-success" 
+                                                        onclick="buyMoreStock('{{ holding.symbol }}', {{ holding.current_price }})"
+                                                        title="Buy More">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                                <a href="{{ url_for('portfolio_transactions', symbol=holding.symbol) }}" 
+                                                   class="btn btn-outline-info" title="View Transactions">
+                                                    <i class="fas fa-history"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Transactions -->
+            <div class="card mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Transactions</h5>
+                    <a href="{{ url_for('portfolio_transactions') }}" class="btn btn-sm btn-outline-primary">
+                        View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if recent_transactions %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Type</th>
+                                        <th>Symbol</th>
+                                        <th>Shares</th>
+                                        <th>Price</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for transaction in recent_transactions %}
+                                        <tr>
+                                            <td>{{ transaction.transaction_date.strftime('%m/%d/%Y') if transaction.transaction_date else 'N/A' }}</td>
+                                            <td>
+                                                <span class="badge {% if transaction.transaction_type == 'BUY' %}bg-success{% else %}bg-danger{% endif %}">
+                                                    {{ transaction.transaction_type }}
+                                                </span>
+                                            </td>
+                                            <td>{{ transaction.symbol }}</td>
+                                            <td>{{ "%.2f"|format(transaction.shares) }}</td>
+                                            <td>${{ "%.2f"|format(transaction.price_per_share) }}</td>
+                                            <td>${{ "%.2f"|format(transaction.total_amount) }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No recent transactions found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <!-- Empty Portfolio -->
+            <div class="text-center py-5">
+                <i class="fas fa-briefcase fa-3x text-muted mb-3"></i>
+                <h4>Your portfolio is empty</h4>
+                <p class="text-muted">Start tracking your investments by adding your first transaction</p>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addTransactionModal">
+                    <i class="fas fa-plus me-2"></i>Add Your First Transaction
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Transaction Modal -->
+<div class="modal fade" id="addTransactionModal" tabindex="-1" aria-labelledby="addTransactionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTransactionModalLabel">
+                    <i class="fas fa-plus me-2"></i>Add Transaction
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_portfolio_transaction') }}" id="transactionForm">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="transaction_type" class="form-label">Transaction Type</label>
+                                <select class="form-select" id="transaction_type" name="transaction_type" required>
+                                    <option value="BUY" selected>Buy</option>
+                                    <option value="SELL">Sell</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="symbol" class="form-label">Stock Symbol</label>
+                                <input type="text" class="form-control" id="symbol" name="symbol" required 
+                                       placeholder="e.g. AAPL" style="text-transform: uppercase;">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="shares" class="form-label">Shares</label>
+                                <input type="number" class="form-control" id="shares" name="shares" 
+                                       required min="0.01" step="0.01" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="price_per_share" class="form-label">Price per Share</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" id="price_per_share" name="price_per_share" 
+                                           required min="0.01" step="0.01" placeholder="0.00">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="fees" class="form-label">Fees (Optional)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" class="form-control" id="fees" name="fees" 
+                                           min="0" step="0.01" placeholder="0.00" value="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="transaction_date" class="form-label">Transaction Date</label>
+                        <input type="date" class="form-control" id="transaction_date" name="transaction_date" 
+                               required value="{{ today }}">
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2" 
+                                  placeholder="Any additional notes about this transaction..."></textarea>
+                    </div>
+                    <div class="alert alert-info" id="transactionSummary" style="display: none;">
+                        <strong>Transaction Summary:</strong>
+                        <div id="summaryContent"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success" id="submitTransaction">
+                        <i class="fas fa-plus me-2"></i>Add Transaction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function sellStock(symbol, maxShares, currentPrice) {
+    // Pre-fill modal for selling
+    document.getElementById('transaction_type').value = 'SELL';
+    document.getElementById('symbol').value = symbol;
+    document.getElementById('shares').max = maxShares;
+    document.getElementById('price_per_share').value = currentPrice.toFixed(2);
+    
+    const modal = new bootstrap.Modal(document.getElementById('addTransactionModal'));
+    modal.show();
+}
+
+function buyMoreStock(symbol, currentPrice) {
+    // Pre-fill modal for buying more
+    document.getElementById('transaction_type').value = 'BUY';
+    document.getElementById('symbol').value = symbol;
+    document.getElementById('shares').removeAttribute('max');
+    document.getElementById('price_per_share').value = currentPrice.toFixed(2);
+    
+    const modal = new bootstrap.Modal(document.getElementById('addTransactionModal'));
+    modal.show();
+}
+
+// Auto-uppercase symbol input
+document.getElementById('symbol').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+
+// Calculate transaction summary
+function updateTransactionSummary() {
+    const shares = parseFloat(document.getElementById('shares').value) || 0;
+    const price = parseFloat(document.getElementById('price_per_share').value) || 0;
+    const fees = parseFloat(document.getElementById('fees').value) || 0;
+    const type = document.getElementById('transaction_type').value;
+    
+    if (shares > 0 && price > 0) {
+        const total = (shares * price) + fees;
+        const summaryContent = `
+            ${type} ${shares} shares at $${price.toFixed(2)} each<br>
+            Subtotal: $${(shares * price).toFixed(2)}<br>
+            Fees: $${fees.toFixed(2)}<br>
+            <strong>Total: $${total.toFixed(2)}</strong>
+        `;
+        
+        document.getElementById('summaryContent').innerHTML = summaryContent;
+        document.getElementById('transactionSummary').style.display = 'block';
+    } else {
+        document.getElementById('transactionSummary').style.display = 'none';
+    }
+}
+
+// Add event listeners for summary calculation
+['shares', 'price_per_share', 'fees', 'transaction_type'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateTransactionSummary);
+});
+
+// Reset form when modal is hidden
+document.getElementById('addTransactionModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('transactionForm').reset();
+    document.getElementById('transactionSummary').style.display = 'none';
+    document.getElementById('shares').removeAttribute('max');
+    document.getElementById('transaction_date').value = '{{ today }}';
+});
+</script>
+{% endblock %}

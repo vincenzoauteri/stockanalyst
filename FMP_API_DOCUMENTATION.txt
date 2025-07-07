@@ -1,0 +1,391 @@
+===============================================================================
+                     FMP API INTEGRATION DOCUMENTATION
+                          Stock Analyst Application
+===============================================================================
+
+OVERVIEW
+========
+This document provides a comprehensive overview of all Financial Modeling Prep
+(FMP) API endpoints currently implemented in the Stock Analyst application,
+including their purpose, parameters, response data, and usage patterns.
+
+BASE CONFIGURATION
+==================
+API Base URL: https://financialmodelingprep.com/api/v3
+Authentication: API key required via FMP_API_KEY environment variable
+Rate Limiting: Configurable delay between requests (default: 0.25 seconds)
+Daily Limit: 250 requests/day (configurable via DAILY_API_LIMIT)
+Usage Tracking: Built-in request tracking with daily quotas and analytics
+
+IMPLEMENTED FMP API ENDPOINTS
+=============================
+
+1. COMPANY PROFILE ENDPOINT
+---------------------------
+URL: /profile/{symbol}
+Method: get_company_profile(symbol: str)
+Purpose: Fetch basic company information and current stock price data
+
+Parameters:
+- symbol (string): Stock ticker symbol (e.g., "AAPL", "MSFT")
+
+Response Data Fields:
+- symbol: Stock ticker symbol
+- companyName: Full company name
+- price: Current stock price (USD)
+- beta: Beta coefficient (volatility measure)
+- mktCap: Market capitalization
+- industry: Industry classification
+- sector: Sector classification (e.g., "Technology", "Healthcare")
+- description: Company business description
+- website: Company website URL
+- ceo: Chief Executive Officer name
+- employees: Number of employees
+- dcf: Discounted cash flow valuation
+
+Usage Context:
+- Called by main.py for initial data collection
+- Used by data_fetcher.py for company profile updates
+- Provides foundational company data for all analysis
+
+Example Usage:
+profile = client.get_company_profile("AAPL")
+company_name = profile[0]['companyName']
+current_price = profile[0]['price']
+
+2. HISTORICAL PRICE DATA ENDPOINT
+---------------------------------
+URL: /historical-price-full/{symbol}
+Method: get_historical_prices(symbol: str, period: str = '1year')
+Purpose: Fetch historical daily price and volume data
+
+Parameters:
+- symbol (string): Stock ticker symbol
+- period (string): Time period ('1year', '6months', '3months', '1month')
+- timeseries (int): Number of trading days (automatically set: 252 for 1year)
+
+Response Data Fields (per trading day):
+- date: Trading date (YYYY-MM-DD format)
+- open: Opening price
+- high: Daily high price
+- low: Daily low price
+- close: Closing price
+- volume: Trading volume
+- adjClose: Adjusted closing price (accounts for splits/dividends)
+
+Usage Context:
+- Primary source for historical price analysis
+- Used for technical indicators and trend analysis
+- Stored in historical_prices database table
+- Supports incremental updates (fetches only missing dates)
+
+Example Usage:
+prices = client.get_historical_prices("TSLA", period="6months")
+price_data = prices['historical']
+
+3. KEY METRICS ENDPOINT
+-----------------------
+URL: /key-metrics/{symbol}
+Method: get_key_metrics(symbol: str, period: str = 'annual', limit: int = 5)
+Purpose: Fetch key financial metrics and valuation ratios
+
+Parameters:
+- symbol (string): Stock ticker symbol
+- period (string): 'annual' or 'quarter'
+- limit (int): Number of reporting periods to retrieve (default: 5)
+
+Response Data Fields:
+- date: Report date
+- marketCap: Market capitalization
+- enterpriseValue: Enterprise value
+- peRatio: Price-to-earnings ratio
+- pbRatio: Price-to-book ratio
+- priceToSalesRatio: Price-to-sales ratio
+- dividendYield: Dividend yield percentage
+- roe: Return on equity percentage
+- debtToEquity: Debt-to-equity ratio
+- currentRatio: Current ratio (liquidity measure)
+- freeCashFlowYield: Free cash flow yield percentage
+
+Usage Context:
+- Core component of undervaluation analysis
+- Used for valuation score calculations
+- Provides sector-relative comparison metrics
+- Cached for 24 hours to optimize API usage
+
+4. FINANCIAL RATIOS ENDPOINT
+----------------------------
+URL: /ratios/{symbol}
+Method: get_financial_ratios(symbol: str, period: str = 'annual', limit: int = 5)
+Purpose: Fetch comprehensive financial ratios and efficiency metrics
+
+Parameters:
+- symbol (string): Stock ticker symbol
+- period (string): 'annual' or 'quarter'
+- limit (int): Number of reporting periods to retrieve (default: 5)
+
+Response Data Fields:
+- date: Report date
+- grossProfitMargin: Gross profit margin percentage
+- operatingProfitMargin: Operating profit margin percentage
+- netProfitMargin: Net profit margin percentage
+- returnOnAssets: Return on assets percentage
+- returnOnEquity: Return on equity percentage
+- debtRatio: Total debt ratio
+- currentRatio: Current ratio
+- quickRatio: Quick ratio (acid test)
+- assetTurnover: Asset turnover ratio
+- inventoryTurnover: Inventory turnover ratio
+
+Usage Context:
+- Quality assessment component of undervaluation scoring
+- Profitability and efficiency analysis
+- Management effectiveness evaluation
+- Sector comparison for relative scoring
+
+5. INCOME STATEMENT ENDPOINT
+----------------------------
+URL: /income-statement/{symbol}
+Method: get_income_statement(symbol: str, period: str = 'annual', limit: int = 5)
+Purpose: Fetch income statement data and earnings information
+
+Parameters:
+- symbol (string): Stock ticker symbol
+- period (string): 'annual' or 'quarter'
+- limit (int): Number of reporting periods to retrieve (default: 5)
+
+Response Data Fields:
+- date: Report date
+- revenue: Total revenue
+- grossProfit: Gross profit
+- operatingIncome: Operating income
+- netIncome: Net income
+- eps: Basic earnings per share
+- epsdiluted: Diluted earnings per share
+- operatingExpenses: Operating expenses
+- totalOtherIncomeExpensesNet: Other income/expenses
+
+Usage Context:
+- Revenue growth analysis
+- Earnings trend evaluation
+- Financial strength assessment
+- Base data for financial strength scoring component
+
+6. PRICE TARGET ENDPOINT
+------------------------
+URL: /price-target/{symbol}
+Method: get_price_targets(symbol: str)
+Purpose: Fetch analyst price targets and recommendations
+
+Parameters:
+- symbol (string): Stock ticker symbol
+
+Response Data Fields:
+- publishedDate: Analysis publication date
+- newsURL: Source URL for analysis
+- newsTitle: Analysis title
+- analystName: Analyst or firm name
+- priceTarget: Target price
+- adjPriceTarget: Adjusted target price
+- priceWhenPosted: Stock price when target was set
+
+Usage Context:
+- Available for analyst consensus analysis
+- Currently implemented but not actively used in scoring
+- Future enhancement for analyst sentiment integration
+
+7. FUNDAMENTALS SUMMARY (COMPOSITE ENDPOINT)
+--------------------------------------------
+Method: get_fundamentals_summary(symbol: str)
+Purpose: Aggregated financial data from multiple FMP endpoints
+Implementation: Makes 3 separate API calls and combines results
+
+API Calls Made:
+- get_key_metrics(symbol)
+- get_financial_ratios(symbol)
+- get_income_statement(symbol)
+
+Caching: 24-hour TTL cache to minimize API usage
+
+Combined Response Data:
+- All fields from key metrics, ratios, and income statement
+- Latest quarterly and annual data
+- Standardized field names for consistent processing
+- Error handling for missing or invalid data
+
+Usage Context:
+- Primary data source for undervaluation analyzer
+- Optimized for batch processing during analysis
+- Cached to support repeated analysis without API calls
+- Core component of the scoring algorithm
+
+NON-FMP DATA SOURCES
+====================
+
+8. S&P 500 CONSTITUENTS (WIKIPEDIA SCRAPE)
+------------------------------------------
+URL: https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
+Method: get_sp500_constituents()
+Purpose: Fetch current S&P 500 company list
+
+Response Data Fields:
+- symbol: Stock ticker symbol
+- name: Company name
+- sector: GICS sector classification
+- sub_sector: GICS sub-sector
+- headquarters_location: Company headquarters location
+- date_first_added: Date added to S&P 500
+- cik: Central Index Key
+- founded: Company founding year
+
+Usage Context:
+- Foundation dataset for all stock analysis
+- Updated periodically to reflect S&P 500 changes
+- Not an FMP API call (Wikipedia scraping)
+- Provides universe of stocks for analysis
+
+API USAGE MANAGEMENT SYSTEM
+============================
+
+USAGE TRACKING FEATURES
+-----------------------
+- Daily request counter with 250 request limit (configurable)
+- Rolling log of last 1000 API requests with timestamps
+- Pre-request validation to prevent quota exceeded errors
+- Usage statistics: daily, weekly, monthly analytics
+- Budget allocation across different components
+
+ERROR HANDLING AND RESILIENCE
+-----------------------------
+- Configurable delays between requests (rate limiting)
+- Automatic retry logic with exponential backoff
+- Graceful degradation when API limits are reached
+- Comprehensive logging of all API interactions
+- Request validation before making API calls
+
+CACHING STRATEGY
+---------------
+- Fundamentals data: 24-hour TTL cache for expensive calls
+- Request logs: Rolling 1000-entry cache for debugging
+- Usage tracking: Persistent storage with monthly retention
+- Cache validation: Automatic cleanup of expired entries
+
+DATA PROCESSING PIPELINE
+=========================
+
+REQUEST FLOW SEQUENCE
+---------------------
+1. S&P 500 Constituents → Extract universe of symbols to analyze
+2. Company Profiles → Basic company data for each symbol
+3. Historical Prices → Daily price data for technical analysis
+4. Fundamentals Summary → Financial metrics for scoring
+5. Undervaluation Analysis → Combine all data for investment scores
+
+INTEGRATION POINTS
+==================
+
+FILES USING FMP CLIENT
+----------------------
+- main.py: Initial data collection and application setup
+- undervaluation_analyzer.py: Advanced financial analysis and scoring
+- data_fetcher.py: Common data fetching utilities and helpers
+- daily_updater.py: Scheduled daily data updates
+- scheduler.py: Consolidated scheduling for updates, catchup, and health checks.
+- fmp_client.py: Core API client implementation
+
+DATABASE INTEGRATION
+--------------------
+- All FMP data normalized and stored in SQLite database
+- Column names standardized (lowercase with underscores)
+- Upsert operations for data consistency and conflict resolution
+- Historical data preservation with proper indexing
+- Automatic schema creation and migration support
+
+CONFIGURATION AND ENVIRONMENT
+==============================
+
+REQUIRED ENVIRONMENT VARIABLES
+------------------------------
+- FMP_API_KEY: Your Financial Modeling Prep API key (required)
+- DAILY_API_LIMIT: Daily API request limit (default: 250)
+- REQUEST_DELAY: Delay between requests in seconds (default: 0.25)
+
+CONFIGURABLE PARAMETERS
+-----------------------
+- unified_config.py: Environment-specific settings
+- Rate limiting delays
+- Request timeouts
+- Cache TTL values
+- Database connection parameters
+
+MONITORING AND OBSERVABILITY
+============================
+
+LOGGING
+-------
+- Comprehensive API request logging
+- Performance timing for all requests
+- Error tracking and classification
+- Usage analytics and reporting
+
+METRICS
+-------
+- Daily/weekly/monthly API usage statistics
+- Request success/failure rates
+- Average response times
+- Cache hit/miss ratios
+- Data freshness monitoring
+
+ERROR CATEGORIES
+---------------
+- API quota exceeded
+- Network timeouts
+- Invalid API responses
+- Missing data fields
+- Authentication failures
+
+USAGE RECOMMENDATIONS
+=====================
+
+BEST PRACTICES
+--------------
+1. Monitor daily API usage to stay within limits
+2. Use caching effectively to minimize redundant calls
+3. Implement proper error handling for all API calls
+4. Schedule data updates during off-peak hours
+5. Validate API responses before processing
+
+OPTIMIZATION STRATEGIES
+----------------------
+1. Batch processing during scheduled windows
+2. Prioritize high-value stocks for limited API budgets
+3. Use cached data when available (24-hour freshness)
+4. Implement circuit breakers for API failures
+5. Monitor and analyze usage patterns
+
+FUTURE ENHANCEMENTS
+==================
+
+POTENTIAL ADDITIONS
+------------------
+- Real-time stock price streaming
+- Options data integration
+- Institutional ownership data
+- Analyst recommendations aggregation
+- Economic indicators and macro data
+- Insider trading activity
+- SEC filings integration
+
+API EXPANSION OPPORTUNITIES
+--------------------------
+- Additional FMP endpoints (earnings calendar, stock screener)
+- Alternative data providers integration
+- Real-time news sentiment analysis
+- Social media sentiment tracking
+- ESG (Environmental, Social, Governance) scores
+
+===============================================================================
+Document Version: 1.0
+Last Updated: 2024
+For Support: Review fmp_client.py and unified_config.py for implementation details
+===============================================================================

@@ -1,0 +1,1096 @@
+{% extends "base.html" %}
+
+{% block title %}{{ stock.basic_info.symbol }} - {{ stock.basic_info.name }} - Stock Analyst{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item active">{{ stock.basic_info.symbol }}</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="display-6 mb-0">
+                    {{ stock.basic_info.symbol }}
+                    {% if stock.profile and stock.profile.price %}
+                    <span class="badge bg-success ms-2">${{ "%.2f"|format(stock.profile.price) }}</span>
+                    {% endif %}
+                </h1>
+                <h2 class="h4 text-muted">{{ stock.basic_info.name }}</h2>
+            </div>
+            <div class="text-end">
+                {% if stock.basic_info.sector %}
+                <span class="badge bg-primary mb-1">{{ stock.basic_info.sector }}</span><br>
+                {% endif %}
+                {% if stock.basic_info.sub_sector %}
+                <span class="badge bg-info">{{ stock.basic_info.sub_sector }}</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Financial Data Navigation -->
+        <div class="mt-3">
+            <div class="btn-group" role="group" aria-label="Financial data navigation">
+                <a href="{{ url_for('financial_statements', symbol=stock.basic_info.symbol) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-file-invoice-dollar me-1"></i>Financial Statements
+                </a>
+                <a href="{{ url_for('analyst_recommendations', symbol=stock.basic_info.symbol) }}" class="btn btn-outline-info">
+                    <i class="fas fa-users me-1"></i>Analyst Recommendations
+                </a>
+                <a href="{{ url_for('corporate_actions') }}?symbol={{ stock.basic_info.symbol }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-building me-1"></i>Corporate Actions
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Key Metrics Row -->
+{% if stock.fundamentals %}
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-line fa-2x mb-2"></i>
+                <h4 class="mb-0">
+                    {% if stock.fundamentals.pe_ratio %}
+                    {{ "%.2f"|format(stock.fundamentals.pe_ratio) }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </h4>
+                <small>P/E Ratio</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                <h4 class="mb-0">
+                    {% if stock.fundamentals.market_cap %}
+                    ${{ "%.1fB"|format(stock.fundamentals.market_cap / 1000000000) }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </h4>
+                <small>Market Cap</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-percentage fa-2x mb-2"></i>
+                <h4 class="mb-0">
+                    {% if stock.fundamentals.net_profit_margin %}
+                    {{ "%.1f%%"|format(stock.fundamentals.net_profit_margin * 100) }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </h4>
+                <small>Net Margin</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-coins fa-2x mb-2"></i>
+                <h4 class="mb-0">
+                    {% if stock.fundamentals.roe %}
+                    {{ "%.1f%%"|format(stock.fundamentals.roe * 100) }}
+                    {% else %}
+                    N/A
+                    {% endif %}
+                </h4>
+                <small>ROE</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Main Content Tabs -->
+<ul class="nav nav-tabs" id="stockTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button">
+            <i class="fas fa-info-circle me-1"></i>Overview
+        </button>
+    </li>
+    {% if stock.fundamentals or (stock.data_availability and stock.data_availability.get('company_profile') == 'Data Unavailable') %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="fundamentals-tab" data-bs-toggle="tab" data-bs-target="#fundamentals" type="button">
+            <i class="fas fa-chart-bar me-1"></i>Fundamentals
+        </button>
+    </li>
+    {% endif %}
+    {% if stock.undervaluation %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="valuation-tab" data-bs-toggle="tab" data-bs-target="#valuation" type="button">
+            <i class="fas fa-calculator me-1"></i>Valuation
+        </button>
+    </li>
+    {% endif %}
+    {% if stock.price_history or (stock.data_availability and stock.data_availability.get('historical_prices') == 'Data Unavailable') %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="price-tab" data-bs-toggle="tab" data-bs-target="#price" type="button">
+            <i class="fas fa-chart-line me-1"></i>Price History
+        </button>
+    </li>
+    {% endif %}
+    {% if stock.price_targets %}
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="targets-tab" data-bs-toggle="tab" data-bs-target="#targets" type="button">
+            <i class="fas fa-bullseye me-1"></i>Price Targets
+        </button>
+    </li>
+    {% endif %}
+</ul>
+
+<div class="tab-content mt-4" id="stockTabsContent">
+    <!-- Overview Tab -->
+    <div class="tab-pane fade show active" id="overview" role="tabpanel">
+        <div class="row">
+            <!-- Company Information -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-building me-2"></i>Company Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            <tr>
+                                <td><strong>Symbol:</strong></td>
+                                <td>{{ stock.basic_info.symbol }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Company Name:</strong></td>
+                                <td>{{ stock.basic_info.name }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Sector:</strong></td>
+                                <td>{{ stock.basic_info.sector or 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Sub Sector:</strong></td>
+                                <td>{{ stock.basic_info.sub_sector or 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Headquarters:</strong></td>
+                                <td>{{ stock.basic_info.headquarters or 'N/A' }}</td>
+                            </tr>
+                            {% if stock.profile %}
+                            <tr>
+                                <td><strong>Exchange:</strong></td>
+                                <td>{{ stock.profile.exchange or 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Industry:</strong></td>
+                                <td>{{ stock.profile.industry or 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>CEO:</strong></td>
+                                <td>{{ stock.profile.ceo or 'N/A' }}</td>
+                            </tr>
+                            {% if stock.profile.fulltimeemployees %}
+                            <tr>
+                                <td><strong>Employees:</strong></td>
+                                <td>{{ "{:,}".format(stock.profile.fulltimeemployees) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Financial Snapshot -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Financial Snapshot</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stock.profile %}
+                        <table class="table table-borderless">
+                            {% if stock.profile.price %}
+                            <tr>
+                                <td><strong>Stock Price:</strong></td>
+                                <td class="text-success">${{ "%.2f"|format(stock.profile.price) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.profile.mktcap %}
+                            <tr>
+                                <td><strong>Market Cap:</strong></td>
+                                <td>${{ "%.2fB"|format(stock.profile.mktcap / 1000000000) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.profile.beta %}
+                            <tr>
+                                <td><strong>Beta:</strong></td>
+                                <td>{{ "%.2f"|format(stock.profile.beta) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.profile.lastdiv %}
+                            <tr>
+                                <td><strong>Last Dividend:</strong></td>
+                                <td>${{ "%.2f"|format(stock.profile.lastdiv) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.profile.range %}
+                            <tr>
+                                <td><strong>52-Week Range:</strong></td>
+                                <td>{{ stock.profile.range }}</td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                        {% elif stock.data_availability and stock.data_availability.get('company_profile') == 'Data Unavailable' %}
+                        <div class="alert alert-warning mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Data Unavailable:</strong> Financial profile data is not available for this stock.
+                        </div>
+                        {% else %}
+                        <p class="text-muted">No financial data available from database.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Company Description -->
+        {% if stock.profile and stock.profile.description %}
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Company Description</h5>
+                    </div>
+                    <div class="card-body">
+                        <p>{{ stock.profile.description }}</p>
+                        {% if stock.profile.website %}
+                        <a href="{{ stock.profile.website }}" target="_blank" class="btn btn-outline-primary">
+                            <i class="fas fa-external-link-alt me-1"></i>Visit Website
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% elif stock.data_availability and stock.data_availability.get('company_profile') == 'Data Unavailable' %}
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Company Description</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Data Unavailable:</strong> Company profile information is not available for this stock.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Fundamentals Tab -->
+    {% if stock.fundamentals or (stock.data_availability and stock.data_availability.get('company_profile') == 'Data Unavailable') %}
+    <div class="tab-pane fade" id="fundamentals" role="tabpanel">
+        {% if stock.fundamentals %}
+        <div class="row">
+            <!-- Valuation Metrics -->
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Valuation Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            {% if stock.fundamentals.pe_ratio %}
+                            <tr>
+                                <td>P/E Ratio:</td>
+                                <td><strong>{{ "%.2f"|format(stock.fundamentals.pe_ratio) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.pb_ratio %}
+                            <tr>
+                                <td>P/B Ratio:</td>
+                                <td><strong>{{ "%.2f"|format(stock.fundamentals.pb_ratio) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.price_to_sales %}
+                            <tr>
+                                <td>Price/Sales:</td>
+                                <td><strong>{{ "%.2f"|format(stock.fundamentals.price_to_sales) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.enterprise_value %}
+                            <tr>
+                                <td>Enterprise Value:</td>
+                                <td><strong>${{ "%.2fB"|format(stock.fundamentals.enterprise_value / 1000000000) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Profitability Metrics -->
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Profitability Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            {% if stock.fundamentals.gross_profit_margin %}
+                            <tr>
+                                <td>Gross Margin:</td>
+                                <td><strong>{{ "%.1f%%"|format(stock.fundamentals.gross_profit_margin * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.operating_profit_margin %}
+                            <tr>
+                                <td>Operating Margin:</td>
+                                <td><strong>{{ "%.1f%%"|format(stock.fundamentals.operating_profit_margin * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.net_profit_margin %}
+                            <tr>
+                                <td>Net Margin:</td>
+                                <td><strong>{{ "%.1f%%"|format(stock.fundamentals.net_profit_margin * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.roe %}
+                            <tr>
+                                <td>Return on Equity:</td>
+                                <td><strong>{{ "%.1f%%"|format(stock.fundamentals.roe * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.return_on_assets %}
+                            <tr>
+                                <td>Return on Assets:</td>
+                                <td><strong>{{ "%.1f%%"|format(stock.fundamentals.return_on_assets * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Financial Health -->
+        <div class="row">
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Financial Health</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            {% if stock.fundamentals.debt_to_equity %}
+                            <tr>
+                                <td>Debt/Equity:</td>
+                                <td><strong>{{ "%.2f"|format(stock.fundamentals.debt_to_equity) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.current_ratio %}
+                            <tr>
+                                <td>Current Ratio:</td>
+                                <td><strong>{{ "%.2f"|format(stock.fundamentals.current_ratio) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.dividend_yield %}
+                            <tr>
+                                <td>Dividend Yield:</td>
+                                <td><strong>{{ "%.2f%%"|format(stock.fundamentals.dividend_yield * 100) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Revenue & Earnings -->
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Revenue & Earnings</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless">
+                            {% if stock.fundamentals.revenue %}
+                            <tr>
+                                <td>Revenue:</td>
+                                <td><strong>${{ "%.2fB"|format(stock.fundamentals.revenue / 1000000000) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.net_income %}
+                            <tr>
+                                <td>Net Income:</td>
+                                <td><strong>${{ "%.2fB"|format(stock.fundamentals.net_income / 1000000000) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.eps %}
+                            <tr>
+                                <td>EPS:</td>
+                                <td><strong>${{ "%.2f"|format(stock.fundamentals.eps) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                            {% if stock.fundamentals.eps_diluted %}
+                            <tr>
+                                <td>EPS Diluted:</td>
+                                <td><strong>${{ "%.2f"|format(stock.fundamentals.eps_diluted) }}</strong></td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Data Unavailable:</strong> Fundamental data is not available for this stock.
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Valuation Tab -->
+    {% if stock.undervaluation %}
+    <div class="tab-pane fade" id="valuation" role="tabpanel">
+        <div class="row">
+            <!-- Overall Valuation Score -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Undervaluation Score</h5>
+                    </div>
+                    <div class="card-body text-center">
+                        {% set score = stock.undervaluation.undervaluation_score %}
+                        {% if score %}
+                            <div class="mb-3">
+                                {% if score >= 80 %}
+                                    <span class="badge bg-success fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
+                                    <h4 class="text-success">Highly Undervalued</h4>
+                                    <p class="text-muted">This stock appears to be significantly undervalued relative to its fundamentals.</p>
+                                {% elif score >= 60 %}
+                                    <span class="badge bg-warning fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
+                                    <h4 class="text-warning">Moderately Undervalued</h4>
+                                    <p class="text-muted">This stock shows signs of being undervalued based on our analysis.</p>
+                                {% elif score >= 40 %}
+                                    <span class="badge bg-info fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
+                                    <h4 class="text-info">Fairly Valued</h4>
+                                    <p class="text-muted">This stock appears to be trading near its fair value.</p>
+                                {% else %}
+                                    <span class="badge bg-danger fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
+                                    <h4 class="text-danger">Overvalued</h4>
+                                    <p class="text-muted">This stock may be overvalued relative to its fundamentals.</p>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Data Quality: <span class="badge bg-secondary">{{ stock.undervaluation.data_quality|title }}</span></small>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>No Score Available:</strong> Insufficient data to calculate undervaluation score.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Component Scores -->
+        {% if stock.undervaluation.undervaluation_score %}
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Valuation Metrics (40%)</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stock.undervaluation.valuation_score %}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Score:</span>
+                            <span class="badge bg-primary fs-6">{{ "%.1f"|format(stock.undervaluation.valuation_score) }}</span>
+                        </div>
+                        <div class="progress mb-3">
+                            <div class="progress-bar" style="width: {{ stock.undervaluation.valuation_score }}%"></div>
+                        </div>
+                        <small class="text-muted">
+                            Evaluates P/E, P/B, and Price/Sales ratios relative to sector averages.
+                            Lower ratios indicate better value.
+                        </small>
+                        {% else %}
+                        <div class="alert alert-info mb-0">
+                            <small>Valuation metrics not available</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quality Metrics (30%)</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stock.undervaluation.quality_score %}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Score:</span>
+                            <span class="badge bg-success fs-6">{{ "%.1f"|format(stock.undervaluation.quality_score) }}</span>
+                        </div>
+                        <div class="progress mb-3">
+                            <div class="progress-bar bg-success" style="width: {{ stock.undervaluation.quality_score }}%"></div>
+                        </div>
+                        <small class="text-muted">
+                            Measures profitability through ROE, profit margins, and financial ratios.
+                            Higher scores indicate better business quality.
+                        </small>
+                        {% else %}
+                        <div class="alert alert-info mb-0">
+                            <small>Quality metrics not available</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Financial Strength (20%)</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stock.undervaluation.strength_score %}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Score:</span>
+                            <span class="badge bg-warning fs-6">{{ "%.1f"|format(stock.undervaluation.strength_score) }}</span>
+                        </div>
+                        <div class="progress mb-3">
+                            <div class="progress-bar bg-warning" style="width: {{ stock.undervaluation.strength_score }}%"></div>
+                        </div>
+                        <small class="text-muted">
+                            Assesses debt levels, current ratio, and return on assets.
+                            Higher scores indicate stronger financial position.
+                        </small>
+                        {% else %}
+                        <div class="alert alert-info mb-0">
+                            <small>Financial strength metrics not available</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Risk Adjustment (10%)</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if stock.undervaluation.risk_score %}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Score:</span>
+                            <span class="badge bg-info fs-6">{{ "%.1f"|format(stock.undervaluation.risk_score) }}</span>
+                        </div>
+                        <div class="progress mb-3">
+                            <div class="progress-bar bg-info" style="width: {{ stock.undervaluation.risk_score }}%"></div>
+                        </div>
+                        <small class="text-muted">
+                            Considers beta volatility and market capitalization.
+                            Adjusts for stock-specific risk factors.
+                        </small>
+                        {% else %}
+                        <div class="alert alert-info mb-0">
+                            <small>Risk adjustment metrics not available</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Methodology -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Methodology</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-3">
+                            Our undervaluation score is calculated using a weighted approach that considers multiple factors:
+                        </p>
+                        <ul class="list-unstyled">
+                            <li class="mb-2">
+                                <i class="fas fa-chart-pie text-primary me-2"></i>
+                                <strong>Valuation Metrics (40%):</strong> P/E, P/B, and Price/Sales ratios compared to sector averages
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-chart-line text-success me-2"></i>
+                                <strong>Quality Metrics (30%):</strong> ROE, profit margins, and cash flow metrics
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-shield-alt text-warning me-2"></i>
+                                <strong>Financial Strength (20%):</strong> Debt ratios, current ratio, and return on assets
+                            </li>
+                            <li class="mb-2">
+                                <i class="fas fa-exclamation-triangle text-info me-2"></i>
+                                <strong>Risk Adjustment (10%):</strong> Beta and market cap considerations
+                            </li>
+                        </ul>
+                        <div class="alert alert-info mt-3">
+                            <strong>Disclaimer:</strong> This analysis is for informational purposes only and should not be considered as financial advice. 
+                            Please conduct your own research and consult with financial professionals before making investment decisions.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Price History Tab -->
+    <div class="tab-pane fade" id="price" role="tabpanel">
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Price History</h5>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <!-- Period Selection -->
+                            <div class="btn-group" role="group" aria-label="Time period">
+                                <input type="radio" class="btn-check" name="timePeriod" id="period1m" value="1m">
+                                <label class="btn btn-outline-secondary btn-sm" for="period1m">1M</label>
+                                
+                                <input type="radio" class="btn-check" name="timePeriod" id="period3m" value="3m">
+                                <label class="btn btn-outline-secondary btn-sm" for="period3m">3M</label>
+                                
+                                <input type="radio" class="btn-check" name="timePeriod" id="period6m" value="6m">
+                                <label class="btn btn-outline-secondary btn-sm" for="period6m">6M</label>
+                                
+                                <input type="radio" class="btn-check" name="timePeriod" id="period1y" value="1y" checked>
+                                <label class="btn btn-outline-secondary btn-sm" for="period1y">1Y</label>
+                                
+                                <input type="radio" class="btn-check" name="timePeriod" id="period2y" value="2y">
+                                <label class="btn btn-outline-secondary btn-sm" for="period2y">2Y</label>
+                                
+                                <input type="radio" class="btn-check" name="timePeriod" id="period5y" value="5y">
+                                <label class="btn btn-outline-secondary btn-sm" for="period5y">5Y</label>
+                            </div>
+                            
+                            <!-- Chart Type Selection -->
+                            <div class="btn-group" role="group" aria-label="Chart type">
+                                <input type="radio" class="btn-check" name="chartType" id="lineChart" value="line" checked>
+                                <label class="btn btn-outline-primary btn-sm" for="lineChart">
+                                    <i class="fas fa-chart-line me-1"></i>Line
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="chartType" id="areaChart" value="area">
+                                <label class="btn btn-outline-primary btn-sm" for="areaChart">
+                                    <i class="fas fa-chart-area me-1"></i>Area
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="chartLoading" class="text-center py-4" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div class="mt-2">Loading chart data...</div>
+                        </div>
+                        <div id="chartError" class="alert alert-warning" style="display: none;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Error:</strong> Unable to load chart data. <span id="errorMessage"></span>
+                        </div>
+                        <canvas id="priceChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Volume and Statistics -->
+        <div class="row">
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-bar-chart me-2"></i>Volume Analysis</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="volumeChart" width="400" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Price Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="priceStatistics">
+                            <div class="row text-center">
+                                <div class="col-6 mb-3">
+                                    <small class="text-muted">Period High</small>
+                                    <div class="h5 text-success" id="priceHigh">-</div>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <small class="text-muted">Period Low</small>
+                                    <div class="h5 text-danger" id="priceLow">-</div>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <small class="text-muted">Average Volume</small>
+                                    <div class="h6" id="avgVolume">-</div>
+                                </div>
+                                <div class="col-6 mb-3">
+                                    <small class="text-muted">Price Change</small>
+                                    <div class="h6" id="priceChange">-</div>
+                                </div>
+                                <div class="col-12">
+                                    <small class="text-muted">Data Points: <span id="dataPoints">-</span></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Price Targets Tab -->
+    {% if stock.price_targets %}
+    <div class="tab-pane fade" id="targets" role="tabpanel">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-bullseye me-2"></i>Analyst Price Targets</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Analyst</th>
+                                <th>Price Target</th>
+                                <th>Published Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for target in stock.price_targets %}
+                            <tr>
+                                <td>{{ target.analystCompany or 'Unknown' }}</td>
+                                <td>
+                                    {% if target.priceTarget %}
+                                    <strong>${{ "%.2f"|format(target.priceTarget) }}</strong>
+                                    {% else %}
+                                    N/A
+                                    {% endif %}
+                                </td>
+                                <td>{{ target.publishedDate or 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Data Availability Status -->
+{% if stock.data_availability %}
+<div class="alert alert-info mt-4">
+    <i class="fas fa-info-circle me-2"></i>
+    <strong>Data Availability Status:</strong>
+    <div class="mt-2">
+        {% for data_type, status in stock.data_availability.items() %}
+        <span class="badge bg-warning me-2">{{ data_type.replace('_', ' ').title() }}: {{ status }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Error Messages -->
+{% if stock.api_error %}
+<div class="alert alert-warning mt-4">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>API Warning:</strong> {{ stock.api_error }}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Interactive Stock Price Chart with API Integration
+document.addEventListener('DOMContentLoaded', function() {
+    const symbol = '{{ stock.basic_info.symbol }}';
+    let priceChart = null;
+    let volumeChart = null;
+    let currentData = null;
+    let currentPeriod = '1y';
+    let currentChartType = 'line';
+    
+    // UI Elements
+    const chartLoading = document.getElementById('chartLoading');
+    const chartError = document.getElementById('chartError');
+    const errorMessage = document.getElementById('errorMessage');
+    const priceCanvas = document.getElementById('priceChart');
+    const volumeCanvas = document.getElementById('volumeChart');
+    
+    // Statistics elements
+    const priceHigh = document.getElementById('priceHigh');
+    const priceLow = document.getElementById('priceLow');
+    const avgVolume = document.getElementById('avgVolume');
+    const priceChange = document.getElementById('priceChange');
+    const dataPoints = document.getElementById('dataPoints');
+    
+    // Chart loading and error management
+    function showLoading() {
+        chartLoading.style.display = 'block';
+        chartError.style.display = 'none';
+        priceCanvas.style.display = 'none';
+    }
+    
+    function hideLoading() {
+        chartLoading.style.display = 'none';
+        priceCanvas.style.display = 'block';
+    }
+    
+    function showError(message) {
+        chartLoading.style.display = 'none';
+        chartError.style.display = 'block';
+        errorMessage.textContent = message;
+        priceCanvas.style.display = 'none';
+    }
+    
+    // Fetch chart data from API
+    async function fetchChartData(period) {
+        try {
+            showLoading();
+            
+            const response = await fetch(`/api/stock/${symbol}/chart?period=${period}`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            hideLoading();
+            return data;
+            
+        } catch (error) {
+            console.error('Error fetching chart data:', error);
+            showError(error.message);
+            throw error;
+        }
+    }
+    
+    // Update statistics display
+    function updateStatistics(data) {
+        if (!data || !data.data || !data.data.datasets[0] || !data.data.datasets[0].data.length) {
+            priceHigh.textContent = '-';
+            priceLow.textContent = '-';
+            avgVolume.textContent = '-';
+            priceChange.textContent = '-';
+            dataPoints.textContent = '-';
+            return;
+        }
+        
+        const prices = data.data.datasets[0].data;
+        const volumes = data.volume_data.datasets[0].data;
+        
+        const high = Math.max(...prices);
+        const low = Math.min(...prices);
+        const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
+        const change = prices.length > 1 ? ((prices[prices.length - 1] - prices[0]) / prices[0] * 100) : 0;
+        
+        priceHigh.textContent = '$' + high.toFixed(2);
+        priceLow.textContent = '$' + low.toFixed(2);
+        avgVolume.textContent = (avgVol / 1000000).toFixed(1) + 'M';
+        priceChange.textContent = (change > 0 ? '+' : '') + change.toFixed(2) + '%';
+        priceChange.className = 'h6 ' + (change >= 0 ? 'text-success' : 'text-danger');
+        dataPoints.textContent = prices.length;
+    }
+    
+    // Create price chart
+    function createPriceChart(chartData, type = 'line') {
+        const ctx = priceCanvas.getContext('2d');
+        
+        if (priceChart) {
+            priceChart.destroy();
+        }
+        
+        const dataset = chartData.data.datasets[0];
+        
+        // Configure dataset based on chart type
+        if (type === 'area') {
+            dataset.fill = true;
+            dataset.backgroundColor = 'rgba(54, 162, 235, 0.1)';
+        } else {
+            dataset.fill = false;
+            dataset.backgroundColor = 'rgba(54, 162, 235, 0.1)';
+        }
+        
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: chartData.data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Price ($)'
+                        },
+                        beginAtZero: false,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return 'Price: $' + context.parsed.y.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 4
+                    }
+                }
+            }
+        });
+    }
+    
+    // Create volume chart
+    function createVolumeChart(chartData) {
+        const ctx = volumeCanvas.getContext('2d');
+        
+        if (volumeChart) {
+            volumeChart.destroy();
+        }
+        
+        volumeChart = new Chart(ctx, {
+            type: 'bar',
+            data: chartData.volume_data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Volume'
+                        },
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return (value / 1000000).toFixed(1) + 'M';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'Volume: ' + (context.parsed.y / 1000000).toFixed(1) + 'M';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    // Load chart data for a specific period
+    async function loadChart(period, chartType = 'line') {
+        try {
+            currentPeriod = period;
+            currentChartType = chartType;
+            
+            const data = await fetchChartData(period);
+            currentData = data;
+            
+            createPriceChart(data, chartType);
+            createVolumeChart(data);
+            updateStatistics(data);
+            
+        } catch (error) {
+            console.error('Failed to load chart:', error);
+        }
+    }
+    
+    // Event listeners for period selection
+    document.querySelectorAll('input[name="timePeriod"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                loadChart(this.value, currentChartType);
+            }
+        });
+    });
+    
+    // Event listeners for chart type selection
+    document.querySelectorAll('input[name="chartType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked && currentData) {
+                currentChartType = this.value;
+                createPriceChart(currentData, this.value);
+            }
+        });
+    });
+    
+    // Initialize chart with default period
+    loadChart('1y', 'line');
+});
+</script>
+{% endblock %}

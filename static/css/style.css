@@ -1,0 +1,318 @@
+/* Stock Analyst Custom Styles */
+
+/* Color Variables */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --success-color: #27ae60;
+    --danger-color: #e74c3c;
+    --warning-color: #f39c12;
+    --info-color: #17a2b8;
+    --light-bg: #f8f9fa;
+    --dark-text: #2c3e50;
+}
+
+/* Global Styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--light-bg);
+    color: var(--dark-text);
+}
+
+/* Navigation */
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+.navbar-nav .nav-link {
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.navbar-nav .nav-link:hover {
+    color: var(--secondary-color) !important;
+}
+
+/* Cards */
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+.stock-card {
+    border-left: 4px solid var(--secondary-color);
+}
+
+.stock-card:hover {
+    border-left-color: var(--success-color);
+    transform: translateY(-3px);
+}
+
+/* Metric Cards */
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+}
+
+.metric-card .card-body {
+    padding: 1.5rem;
+}
+
+.metric-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+}
+
+/* Badges */
+.badge {
+    font-weight: 500;
+}
+
+.sector-badge {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+}
+
+/* Tables */
+.table {
+    margin-bottom: 0;
+}
+
+.table td {
+    padding: 0.75rem 0.5rem;
+    border-top: 1px solid #dee2e6;
+    vertical-align: middle;
+}
+
+.table-borderless td {
+    border: none;
+    padding: 0.5rem 0;
+}
+
+/* Stock List Table */
+.table-hover tbody tr:hover {
+    background-color: #e3f2fd !important;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+/* Make entire row appear clickable */
+#stockList tbody tr {
+    transition: all 0.2s ease;
+}
+
+#stockList tbody tr:hover {
+    background-color: #e3f2fd !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+.table thead th {
+    border-top: none;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    color: var(--dark-text);
+}
+
+/* Stock Table Specific Styles */
+#stockList .table td {
+    padding: 1rem 0.75rem;
+}
+
+#stockList .table .fw-bold {
+    font-size: 1.1rem;
+}
+
+#stockList .badge {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+/* Price Indicators */
+.price-up {
+    color: var(--success-color);
+    font-weight: bold;
+}
+
+.price-down {
+    color: var(--danger-color);
+    font-weight: bold;
+}
+
+.price-neutral {
+    color: #6c757d;
+    font-weight: bold;
+}
+
+/* Search and Filter */
+.form-control, .form-select {
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* Tab Navigation */
+.nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    border-bottom-color: var(--secondary-color);
+    color: var(--secondary-color);
+    background-color: transparent;
+}
+
+.nav-tabs .nav-link:hover {
+    border-bottom-color: var(--secondary-color);
+    color: var(--secondary-color);
+}
+
+/* Loading States */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .display-5 {
+        font-size: 2rem;
+    }
+    
+    .metric-card .card-body {
+        padding: 1rem;
+    }
+    
+    .stock-card {
+        margin-bottom: 1rem;
+    }
+    
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    
+    .navbar-brand {
+        font-size: 1.2rem;
+    }
+    
+    .btn-group .btn {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+/* Chart Containers */
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+}
+
+/* Footer */
+footer {
+    background-color: #f8f9fa !important;
+    border-top: 1px solid #dee2e6 !important;
+}
+
+/* Utilities */
+.text-gradient {
+    background: linear-gradient(45deg, var(--secondary-color), var(--success-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.border-left-primary {
+    border-left: 4px solid var(--secondary-color) !important;
+}
+
+.border-left-success {
+    border-left: 4px solid var(--success-color) !important;
+}
+
+.border-left-danger {
+    border-left: 4px solid var(--danger-color) !important;
+}
+
+/* Sector specific colors */
+.sector-technology { border-left-color: #3498db !important; }
+.sector-healthcare { border-left-color: #e74c3c !important; }
+.sector-financials { border-left-color: #27ae60 !important; }
+.sector-energy { border-left-color: #f39c12 !important; }
+.sector-industrials { border-left-color: #9b59b6 !important; }
+.sector-materials { border-left-color: #1abc9c !important; }
+.sector-utilities { border-left-color: #34495e !important; }
+.sector-telecommunications { border-left-color: #e67e22 !important; }
+.sector-realestate { border-left-color: #2ecc71 !important; }
+.sector-consumer { border-left-color: #f1c40f !important; }

@@ -1,0 +1,107 @@
+import pytest
+import pandas as pd
+import sqlite3
+import os
+from unittest.mock import patch, MagicMock
+from datetime import datetime, date
+from sqlalchemy import text, create_engine
+from sqlalchemy.exc import SQLAlchemyError
+
+# Mock environment variables before importing DatabaseManager
+@pytest.fixture(autouse=True)
+def mock_env_vars():
+    with patch.dict(os.environ, {'DATABASE_PATH': ':memory:'}):
+        yield
+
+from database import DatabaseManager
+
+@pytest.fixture
+def db_manager():
+    # Use a temporary in-memory database for testing
+    with patch.dict(os.environ, {'DATABASE_PATH': ':memory:'}):
+        manager = DatabaseManager()
+        yield manager
+        # No explicit teardown needed for in-memory DB
+
+def test_create_tables(db_manager):
+    # Tables should be created during initialization
+    with db_manager.engine.connect() as conn:
+        tables = [
+            'sp500_constituents',
+            'company_profiles',
+            'historical_prices',
+            'undervaluation_scores'
+        ]
+    
+        for table in tables:
+            result = conn.execute(text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}';"))
+            assert result.fetchone() is not None, f"Table {table} was not created"
+
+def test_insert_sp500_constituents(db_manager):
+    data = {
+        'symbol': ['AAPL', 'MSFT'],
+        'name': ['Apple Inc.', 'Microsoft Corp.'],
+        'sector': ['Technology', 'Technology'],
+        'sub_sector': ['Consumer Electronics', 'Software'],
+        'headquarters_location': ['Cupertino, California', 'Redmond, Washington'],
+        'date_first_added': ['1980-12-12', '1986-03-13'],
+        'cik': ['0000320193', '0000789019'],
+        'founded': ['1976', '1975']
+    }
+    df = pd.DataFrame(data)
+
+    db_manager.insert_sp500_constituents(df)
+
+    with db_manager.engine.connect() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM sp500_constituents"))
+        assert result.fetchone()[0] == 2
+    
+        result = conn.execute(text("SELECT name FROM sp500_constituents WHERE symbol = 'AAPL'"))
+        assert result.fetchone()[0] == 'Apple Inc.'
+
+def test_insert_company_profile(db_manager):
+    profile_data = {
+        'symbol': 'GOOG',
+        'companyname': 'Alphabet Inc.',
+        'price': 150.0,
+        'sector': 'Technology',
+        'mktcap': 1000000000000
+    }
+    db_manager.insert_company_profile(profile_data)
+
+    with db_manager.engine.connect() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM company_profiles"))
+        assert result.fetchone()[0] == 1
+
+        result = conn.execute(text("SELECT companyname FROM company_profiles WHERE symbol = 'GOOG'"))
+        assert result.fetchone()[0] == 'Alphabet Inc.'
+
+def test_get_sp500_symbols(db_manager):
+    data = {
+        'symbol': ['AAPL', 'MSFT'],
+        'name': ['Apple Inc.', 'Microsoft Corp.'],
+        'sector': ['Technology', 'Technology'],
+        'sub_sector': ['Consumer Electronics', 'Software'],
+        'headquarters_location': ['Cupertino, California', 'Redmond, Washington'],
+        'date_first_added': ['1980-12-12', '1986-03-13'],
+        'cik': ['0000320193', '0000789019'],
+        'founded': ['1976', '1975']
+    }
+    df = pd.DataFrame(data)
+    db_manager.insert_sp500_constituents(df)
+
+    symbols = db_manager.get_sp500_symbols()
+    assert sorted(symbols) == ['AAPL', 'MSFT']
+
+def test_symbol_exists_in_profiles(db_manager):
+    profile_data = {
+        'symbol': 'GOOG',
+        'companyname': 'Alphabet Inc.',
+        'price': 150.0,
+        'sector': 'Technology',
+        'mktcap': 1000000000000
+    }
+    db_manager.insert_company_profile(profile_data)
+
+    assert db_manager.symbol_exists_in_profiles('GOOG')
+    assert not db_manager.symbol_exists_in_profiles('NONEXISTENT')

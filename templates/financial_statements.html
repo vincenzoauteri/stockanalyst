@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Statements - {{ symbol }} - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-file-invoice-dollar me-2"></i>Financial Statements - {{ symbol }}</h1>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="refreshData()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="exportData()">
+                        <i class="fas fa-download me-1"></i>Export
+                    </button>
+                    <a href="{{ url_for('stock_detail', symbol=symbol) }}" class="btn btn-outline-info">
+                        <i class="fas fa-arrow-left me-1"></i>Back to {{ symbol }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statement Type Tabs -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs" id="statementTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="income-tab" data-bs-toggle="tab" data-bs-target="#income" type="button" role="tab">
+                        <i class="fas fa-chart-line me-1"></i>Income Statement
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="balance-tab" data-bs-toggle="tab" data-bs-target="#balance" type="button" role="tab">
+                        <i class="fas fa-balance-scale me-1"></i>Balance Sheet
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="cashflow-tab" data-bs-toggle="tab" data-bs-target="#cashflow" type="button" role="tab">
+                        <i class="fas fa-money-bill-wave me-1"></i>Cash Flow
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="statementTabContent">
+        
+        <!-- Income Statement Tab -->
+        <div class="tab-pane fade show active" id="income" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Income Statement</h5>
+                </div>
+                <div class="card-body">
+                    {% if income_statements %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Metric</th>
+                                    {% for stmt in income_statements %}
+                                    <th class="text-end">{{ stmt.period_ending }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Total Revenue</strong></td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.total_revenue|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Cost of Revenue</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.cost_of_revenue|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Gross Profit</strong></td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.gross_profit|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Operating Income</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.operating_income|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>EBITDA</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.ebitda|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>EBIT</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.ebit|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Net Income</strong></td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.net_income|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Basic EPS</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.basic_eps|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Diluted EPS</td>
+                                    {% for stmt in income_statements %}
+                                    <td class="text-end">{{ stmt.diluted_eps|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif data_availability and data_availability.get('financial_statements') == 'Data Unavailable' %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Data Unavailable:</strong> Income statement data is not available for {{ symbol }}.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>No income statement data available for {{ symbol }}.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance Sheet Tab -->
+        <div class="tab-pane fade" id="balance" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Balance Sheet</h5>
+                </div>
+                <div class="card-body">
+                    {% if balance_sheets %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Metric</th>
+                                    {% for stmt in balance_sheets %}
+                                    <th class="text-end">{{ stmt.period_ending }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="table-secondary">
+                                    <td><strong>ASSETS</strong></td>
+                                    {% for stmt in balance_sheets %}
+                                    <td></td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Current Assets</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.current_assets|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Cash and Equivalents</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.cash_and_equivalents|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Accounts Receivable</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.accounts_receivable|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Inventory</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.inventory|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Property, Plant & Equipment</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.property_plant_equipment|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Assets</strong></td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end"><strong>{{ stmt.total_assets|format_currency }}</strong></td>
+                                    {% endfor %}
+                                </tr>
+                                <tr class="table-secondary">
+                                    <td><strong>LIABILITIES & EQUITY</strong></td>
+                                    {% for stmt in balance_sheets %}
+                                    <td></td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Current Liabilities</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.current_liabilities|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Total Debt</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.total_debt|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Long Term Debt</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.long_term_debt|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Liabilities</strong></td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end"><strong>{{ stmt.total_liabilities|format_currency }}</strong></td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Retained Earnings</td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end">{{ stmt.retained_earnings|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Total Equity</strong></td>
+                                    {% for stmt in balance_sheets %}
+                                    <td class="text-end"><strong>{{ stmt.total_equity|format_currency }}</strong></td>
+                                    {% endfor %}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif data_availability and data_availability.get('financial_statements') == 'Data Unavailable' %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Data Unavailable:</strong> Balance sheet data is not available for {{ symbol }}.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>No balance sheet data available for {{ symbol }}.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Cash Flow Tab -->
+        <div class="tab-pane fade" id="cashflow" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Cash Flow Statement</h5>
+                </div>
+                <div class="card-body">
+                    {% if cash_flow_statements %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Metric</th>
+                                    {% for stmt in cash_flow_statements %}
+                                    <th class="text-end">{{ stmt.period_ending }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Operating Cash Flow</strong></td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.operating_cash_flow|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Investing Cash Flow</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.investing_cash_flow|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Financing Cash Flow</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.financing_cash_flow|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Net Change in Cash</strong></td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.net_change_in_cash|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td><strong>Free Cash Flow</strong></td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.free_cash_flow|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Capital Expenditures</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.capital_expenditures|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Dividend Payments</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.dividend_payments|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Share Repurchases</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.share_repurchases|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                                <tr>
+                                    <td>Depreciation & Amortization</td>
+                                    {% for stmt in cash_flow_statements %}
+                                    <td class="text-end">{{ stmt.depreciation_amortization|format_currency }}</td>
+                                    {% endfor %}
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif data_availability and data_availability.get('financial_statements') == 'Data Unavailable' %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Data Unavailable:</strong> Cash flow statement data is not available for {{ symbol }}.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>No cash flow statement data available for {{ symbol }}.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshData() {
+    location.reload();
+}
+
+function exportData() {
+    const activeTab = document.querySelector('.tab-pane.active');
+    const table = activeTab.querySelector('table');
+    if (!table) return;
+    
+    const tabName = activeTab.id;
+    const rows = table.querySelectorAll('tr');
+    let csv = '';
+    
+    for (let row of rows) {
+        const cells = row.querySelectorAll('th, td');
+        const rowData = Array.from(cells).map(cell => `"${cell.textContent.trim()}"`);
+        csv += rowData.join(',') + '\n';
+    }
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `${tabName}_statement_{{ symbol }}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+</script>
+{% endblock %}

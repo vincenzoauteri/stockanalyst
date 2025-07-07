@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}My Watchlist - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-eye me-2"></i>My Watchlist</h2>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStockModal">
+                <i class="fas fa-plus me-2"></i>Add Stock
+            </button>
+        </div>
+        
+        {% if watchlist %}
+            <div class="row">
+                {% for stock in watchlist %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card stock-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0">
+                                        <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" class="text-decoration-none">
+                                            {{ stock.symbol }}
+                                        </a>
+                                    </h5>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="removeFromWatchlist('{{ stock.symbol }}')"
+                                            title="Remove from watchlist">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <p class="card-text text-muted mb-2">{{ stock.company_name or stock.name }}</p>
+                                
+                                {% if stock.sector %}
+                                    <span class="badge bg-secondary sector-badge mb-2">{{ stock.sector }}</span>
+                                {% endif %}
+                                
+                                <div class="row text-center">
+                                    {% if stock.price %}
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Price</small>
+                                            <strong>${{ "%.2f"|format(stock.price) }}</strong>
+                                        </div>
+                                    {% endif %}
+                                    
+                                    {% if stock.undervaluation_score %}
+                                        <div class="col-6">
+                                            <small class="text-muted d-block">Score</small>
+                                            <span class="badge {% if stock.undervaluation_score >= 80 %}bg-success{% elif stock.undervaluation_score >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                {{ "%.1f"|format(stock.undervaluation_score) }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if stock.notes %}
+                                    <div class="mt-3">
+                                        <small class="text-muted d-block">Notes:</small>
+                                        <p class="small">{{ stock.notes }}</p>
+                                    </div>
+                                {% endif %}
+                                
+                                <div class="mt-3">
+                                    <small class="text-muted">Added: {{ stock.added_at.strftime('%b %d, %Y') if stock.added_at else 'N/A' }}</small>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-transparent">
+                                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="editNotes('{{ stock.symbol }}', '{{ stock.notes or '' }}')"
+                                            title="Edit notes">
+                                        <i class="fas fa-edit"></i> Notes
+                                    </button>
+                                    <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-chart-line"></i> View
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            
+            <div class="mt-4 text-center">
+                <p class="text-muted">
+                    <i class="fas fa-info-circle me-1"></i>
+                    You have {{ watchlist|length }} stock{{ 's' if watchlist|length != 1 else '' }} in your watchlist
+                </p>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-eye-slash fa-3x text-muted mb-3"></i>
+                <h4>Your watchlist is empty</h4>
+                <p class="text-muted">Start adding stocks to track your favorite investments</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStockModal">
+                    <i class="fas fa-plus me-2"></i>Add Your First Stock
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Stock Modal -->
+<div class="modal fade" id="addStockModal" tabindex="-1" aria-labelledby="addStockModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addStockModalLabel">
+                    <i class="fas fa-plus me-2"></i>Add Stock to Watchlist
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('add_to_watchlist') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="symbol" class="form-label">Stock Symbol</label>
+                        <input type="text" class="form-control" id="symbol" name="symbol" required 
+                               placeholder="e.g. AAPL, MSFT, GOOGL" style="text-transform: uppercase;">
+                        <div class="form-text">Enter a valid S&P 500 stock symbol</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                  placeholder="Add any notes about why you're watching this stock..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Add to Watchlist
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Notes Modal -->
+<div class="modal fade" id="editNotesModal" tabindex="-1" aria-labelledby="editNotesModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editNotesModalLabel">
+                    <i class="fas fa-edit me-2"></i>Edit Notes
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('update_watchlist_notes') }}">
+                <div class="modal-body">
+                    <input type="hidden" id="edit_symbol" name="symbol">
+                    <div class="mb-3">
+                        <label for="edit_notes" class="form-label">Notes for <span id="edit_symbol_display"></span></label>
+                        <textarea class="form-control" id="edit_notes" name="notes" rows="4" 
+                                  placeholder="Add any notes about this stock..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Notes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function removeFromWatchlist(symbol) {
+    if (confirm(`Are you sure you want to remove ${symbol} from your watchlist?`)) {
+        fetch('/remove_from_watchlist', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({symbol: symbol})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error removing stock from watchlist: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error removing stock from watchlist');
+        });
+    }
+}
+
+function editNotes(symbol, currentNotes) {
+    document.getElementById('edit_symbol').value = symbol;
+    document.getElementById('edit_symbol_display').textContent = symbol;
+    document.getElementById('edit_notes').value = currentNotes || '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('editNotesModal'));
+    modal.show();
+}
+
+// Auto-uppercase symbol input
+document.getElementById('symbol').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+</script>
+{% endblock %}
