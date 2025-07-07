@@ -4,7 +4,7 @@ Centralized configuration supporting multiple environments and enhanced features
 """
 
 import os
-from datetime import time
+from datetime import time, date
 
 
 class BaseConfig:
@@ -101,6 +101,20 @@ class BaseConfig:
     }
     
     # Market Calendar Settings
+    MARKET_HOLIDAYS_2025 = [
+        '2025-01-01',  # New Year's Day
+        '2025-01-20',  # MLK Day (3rd Monday in January)
+        '2025-02-17',  # Presidents Day (3rd Monday in February)
+        '2025-04-18',  # Good Friday
+        '2025-05-26',  # Memorial Day (last Monday in May)
+        '2025-06-19',  # Juneteenth
+        '2025-07-04',  # Independence Day
+        '2025-09-01',  # Labor Day (1st Monday in September)
+        '2025-11-27',  # Thanksgiving (4th Thursday in November)
+        '2025-12-25',  # Christmas
+    ]
+    
+    # Legacy 2024 holidays for backward compatibility
     MARKET_HOLIDAYS_2024 = [
         '2024-01-01',  # New Year's Day
         '2024-01-15',  # MLK Day
@@ -162,6 +176,24 @@ class BaseConfig:
     # Flask/Web Application Configuration
     DEBUG = False
     SECRET_KEY = os.getenv('SECRET_KEY', 'change-me-in-production')
+    
+    @classmethod
+    def get_market_holidays_as_dates(cls, year=2025):
+        """Get market holidays as date objects for the specified year"""
+        if year == 2025:
+            holiday_strings = cls.MARKET_HOLIDAYS_2025
+        elif year == 2024:
+            holiday_strings = cls.MARKET_HOLIDAYS_2024
+        else:
+            # Default to 2025 if year not supported
+            holiday_strings = cls.MARKET_HOLIDAYS_2025
+            
+        holidays = []
+        for holiday_str in holiday_strings:
+            year_str, month_str, day_str = holiday_str.split('-')
+            holidays.append(date(int(year_str), int(month_str), int(day_str)))
+        
+        return holidays
     
     @classmethod
     def validate_config(cls):

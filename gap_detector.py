@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from database import DatabaseManager
 from sqlalchemy import text
+from unified_config import get_config
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -32,20 +33,11 @@ class GapDetector:
     
     def __init__(self):
         self.db_manager = DatabaseManager()
+        self.config = get_config()
         
-        # Market calendar - skip weekends and major holidays
-        self.market_holidays_2024 = [
-            date(2024, 1, 1),   # New Year's Day
-            date(2024, 1, 15),  # MLK Day
-            date(2024, 2, 19),  # Presidents Day
-            date(2024, 3, 29),  # Good Friday
-            date(2024, 5, 27),  # Memorial Day
-            date(2024, 6, 19),  # Juneteenth
-            date(2024, 7, 4),   # Independence Day
-            date(2024, 9, 2),   # Labor Day
-            date(2024, 11, 28), # Thanksgiving
-            date(2024, 12, 25), # Christmas
-        ]
+        # Market calendar - get holidays from unified config
+        current_year = datetime.now().year
+        self.market_holidays = self.config.get_market_holidays_as_dates(current_year)
         
         # Gap priority thresholds
         self.gap_thresholds = {
@@ -62,7 +54,7 @@ class GapDetector:
             return False
         
         # Skip holidays
-        if check_date in self.market_holidays_2024:
+        if check_date in self.market_holidays:
             return False
         
         return True
