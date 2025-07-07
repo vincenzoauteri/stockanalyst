@@ -17,9 +17,7 @@ from services import (
     get_auth_manager,
     get_portfolio_manager
 )
-import pandas as pd
 import json
-import sqlite3
 import os
 import signal
 import sys

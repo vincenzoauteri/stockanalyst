@@ -9,7 +9,6 @@ import logging
 import os
 import signal
 import sys
-import threading
 import time
 import json
 from datetime import datetime, timedelta

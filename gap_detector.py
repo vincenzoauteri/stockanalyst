@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from database import DatabaseManager
 from sqlalchemy import text
 from unified_config import get_config
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 

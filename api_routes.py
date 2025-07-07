@@ -14,7 +14,6 @@ from services import (
     get_auth_manager,
     get_portfolio_manager
 )
-import pandas as pd
 from datetime import datetime, date
 
 logger = get_logger(__name__)

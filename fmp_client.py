@@ -5,7 +5,6 @@ import os
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from datetime import datetime, date, timedelta
-from collections import deque
 import json
 import time
 from pathlib import Path

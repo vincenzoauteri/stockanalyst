@@ -4,7 +4,7 @@ Data Access Layer for Stock Analyst Web Application
 Handles all database queries and data retrieval operations
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from database import DatabaseManager
 from sqlalchemy import text
 import logging
