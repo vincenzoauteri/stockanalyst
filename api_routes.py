@@ -5,12 +5,15 @@ RESTful API endpoints for programmatic access to stock data and portfolio manage
 """
 
 from flask import Blueprint, request, jsonify, session
-from data_access_layer import StockDataService
-from fmp_client import FMPClient
-from undervaluation_analyzer import UndervaluationAnalyzer
-from auth import AuthenticationManager, login_required
-from portfolio import PortfolioManager
+from auth import login_required
 from logging_config import get_logger
+from services import (
+    get_stock_service,
+    get_fmp_client,
+    get_undervaluation_analyzer,
+    get_auth_manager,
+    get_portfolio_manager
+)
 import pandas as pd
 from datetime import datetime, date
 
@@ -33,31 +36,6 @@ def serialize_dates_in_dict(obj):
 api_v2 = Blueprint('api_v2', __name__, url_prefix='/api/v2')
 
 # Initialize services (global instances will be used)
-def get_stock_service():
-    """Get stock data service instance"""
-    # This will be injected from the main app
-    from app import get_stock_service as get_service
-    return get_service()
-
-def get_fmp_client():
-    """Get FMP client instance"""
-    from app import get_fmp_client as get_client
-    return get_client()
-
-def get_undervaluation_analyzer():
-    """Get undervaluation analyzer instance"""
-    from app import get_undervaluation_analyzer as get_analyzer
-    return get_analyzer()
-
-def get_auth_manager():
-    """Get authentication manager instance"""
-    from app import get_auth_manager as get_manager
-    return get_manager()
-
-def get_portfolio_manager():
-    """Get portfolio manager instance"""
-    from app import get_portfolio_manager as get_manager
-    return get_manager()
 
 # Stock Data Endpoints
 @api_v2.route('/stocks', methods=['GET'])

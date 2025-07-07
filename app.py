@@ -6,14 +6,17 @@ Uses separate data access layer for better separation of concerns
 """
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
-from data_access_layer import StockDataService
-from fmp_client import FMPClient
-from undervaluation_analyzer import UndervaluationAnalyzer
-from auth import AuthenticationManager, login_required, get_current_user
-from portfolio import PortfolioManager
+from auth import login_required, get_current_user
 from logging_config import setup_logging, get_logger
 from api_routes import api_v2
 from api_documentation import create_api_documentation
+from services import (
+    get_stock_service,
+    get_fmp_client,
+    get_undervaluation_analyzer,
+    get_auth_manager,
+    get_portfolio_manager
+)
 import pandas as pd
 import json
 import sqlite3
@@ -66,47 +69,6 @@ def to_json_filter(obj):
     
     return json.dumps(obj, default=date_serializer)
 
-# Initialize services (will be initialized on first request)
-stock_service = None
-fmp_client = None
-undervaluation_analyzer = None
-auth_manager = None
-portfolio_manager = None
-
-def get_stock_service():
-    """Get stock data service, initializing if needed"""
-    global stock_service
-    if stock_service is None:
-        stock_service = StockDataService()
-    return stock_service
-
-def get_fmp_client():
-    """Get FMP client, initializing if needed"""
-    global fmp_client
-    if fmp_client is None:
-        fmp_client = FMPClient()
-    return fmp_client
-
-def get_undervaluation_analyzer():
-    """Get undervaluation analyzer, initializing if needed"""
-    global undervaluation_analyzer
-    if undervaluation_analyzer is None:
-        undervaluation_analyzer = UndervaluationAnalyzer()
-    return undervaluation_analyzer
-
-def get_auth_manager():
-    """Get authentication manager, initializing if needed"""
-    global auth_manager
-    if auth_manager is None:
-        auth_manager = AuthenticationManager()
-    return auth_manager
-
-def get_portfolio_manager():
-    """Get portfolio manager, initializing if needed"""
-    global portfolio_manager
-    if portfolio_manager is None:
-        portfolio_manager = PortfolioManager()
-    return portfolio_manager
 
 @app.route('/')
 def index():
