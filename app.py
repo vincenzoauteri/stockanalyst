@@ -32,6 +32,18 @@ logger = get_logger(__name__)
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
 
+# Check for default secret key in production environment
+env = os.getenv('FLASK_ENV', os.getenv('ENV', 'production')).lower()
+if env in ['production', 'prod']:
+    default_secret_keys = [
+        'your-secret-key-change-in-production',
+        'change-me-in-production',
+        'production-secret-key-change-me'
+    ]
+    if app.config['SECRET_KEY'] in default_secret_keys:
+        logger.warning("SECURITY WARNING: Default SECRET_KEY detected in production environment. "
+                      "Please set a secure SECRET_KEY environment variable.")
+
 # Register API blueprint
 app.register_blueprint(api_v2)
 
