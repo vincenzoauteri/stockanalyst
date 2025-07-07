@@ -84,9 +84,18 @@ def index():
         
         return render_template('index.html', stocks=stocks_list, stats=stats)
         
+    except AttributeError as e:
+        logger.error(f"Service method not available in index route: {e}")
+        return render_template('error.html', error='Service temporarily unavailable'), 503
+    except ConnectionError as e:
+        logger.error(f"Database connection error in index route: {e}")
+        return render_template('error.html', error='Database connection error'), 503
+    except FileNotFoundError as e:
+        logger.error(f"Template not found in index route: {e}")
+        return "Template error", 500
     except Exception as e:
-        logger.error(f"Error in index route: {e}")
-        return render_template('error.html', error=str(e))
+        logger.error(f"Unexpected error in index route: {e}")
+        return render_template('error.html', error='An unexpected error occurred'), 500
 
 @app.route('/stock/<symbol>')
 def stock_detail(symbol):

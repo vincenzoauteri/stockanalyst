@@ -44,13 +44,17 @@ def api_get_stocks():
     try:
         service = get_stock_service()
         
-        # Get query parameters
-        sector = request.args.get('sector')
-        min_score = request.args.get('min_score', type=float)
-        max_score = request.args.get('max_score', type=float)
-        sort_field = request.args.get('sort', 'symbol')
-        sort_order = request.args.get('order', 'asc')
-        limit = request.args.get('limit', type=int)
+        # Get query parameters with validation
+        try:
+            sector = request.args.get('sector')
+            min_score = request.args.get('min_score', type=float)
+            max_score = request.args.get('max_score', type=float)
+            sort_field = request.args.get('sort', 'symbol')
+            sort_order = request.args.get('order', 'asc')
+            limit = request.args.get('limit', type=int)
+        except ValueError as e:
+            logger.warning(f"Invalid query parameters in api_get_stocks: {e}")
+            return jsonify({'success': False, 'error': 'Invalid query parameters'}), 400
         
         # Get all stocks with scores
         stocks_list = service.get_all_stocks_with_scores()
@@ -68,23 +72,32 @@ def api_get_stocks():
         # Apply sorting
         reverse_sort = sort_order.lower() == 'desc'
         if sort_field in ['symbol', 'price', 'market_cap', 'undervaluation_score']:
-            stocks_list.sort(key=lambda x: x.get(sort_field, 0), reverse=reverse_sort)
+            try:
+                stocks_list.sort(key=lambda x: x.get(sort_field, 0), reverse=reverse_sort)
+            except TypeError as e:
+                logger.warning(f"Sort field incompatible types in api_get_stocks: {e}")
+                # Fall back to string comparison
+                stocks_list.sort(key=lambda x: str(x.get(sort_field, '')), reverse=reverse_sort)
         
         # Apply limit
-        if limit:
+        if limit and limit > 0:
             stocks_list = stocks_list[:limit]
         
         # Clean up response data
         response_data = []
         for stock in stocks_list:
-            response_data.append({
-                'symbol': stock.get('symbol'),
-                'name': stock.get('name') or stock.get('company_name'),
-                'sector': stock.get('sector'),
-                'price': stock.get('price'),
-                'market_cap': stock.get('mktcap'),
-                'undervaluation_score': stock.get('undervaluation_score')
-            })
+            try:
+                response_data.append({
+                    'symbol': stock.get('symbol'),
+                    'name': stock.get('name') or stock.get('company_name'),
+                    'sector': stock.get('sector'),
+                    'price': stock.get('price'),
+                    'market_cap': stock.get('mktcap'),
+                    'undervaluation_score': stock.get('undervaluation_score')
+                })
+            except (AttributeError, KeyError) as e:
+                logger.warning(f"Skipping malformed stock data: {e}")
+                continue
         
         return jsonify({
             'success': True,
@@ -100,9 +113,15 @@ def api_get_stocks():
             }
         })
         
+    except AttributeError as e:
+        logger.error(f"Service method not available in api_get_stocks: {e}")
+        return jsonify({'success': False, 'error': 'Service temporarily unavailable'}), 503
+    except ConnectionError as e:
+        logger.error(f"Database connection error in api_get_stocks: {e}")
+        return jsonify({'success': False, 'error': 'Database connection error'}), 503
     except Exception as e:
-        logger.error(f"Error in api_get_stocks: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Unexpected error in api_get_stocks: {e}")
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
 @api_v2.route('/stocks/<string:symbol>', methods=['GET'])
 def api_get_stock_detail(symbol):
