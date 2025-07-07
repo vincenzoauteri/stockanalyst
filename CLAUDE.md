@@ -208,7 +208,7 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 
 **API Documentation (api_documentation.py)** - Dynamic API documentation generator
 
-**Configuration Management (config.py, enhanced_config.py, unified_config.py)** - Multiple configuration layers for different environments
+**Configuration Management (unified_config.py)** - Centralized configuration for all environments
 
 **Centralized Logging System (logging_config.py)** - Comprehensive logging infrastructure with file and console output
 
