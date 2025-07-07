@@ -7,7 +7,8 @@ Handles user portfolios, transactions, and performance calculations
 import os
 from datetime import datetime, date
 from typing import Dict, List, Optional, Tuple
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from database import DatabaseManager
 from logging_config import get_logger, log_function_call
 
 logger = get_logger(__name__)
@@ -15,26 +16,10 @@ logger = get_logger(__name__)
 class PortfolioManager:
     """Manages user portfolios and transactions"""
     
-    def __init__(self, db_path=None):
+    def __init__(self):
         """Initialize portfolio manager"""
-        # Check if we're using PostgreSQL (containerized) or SQLite (legacy)
-        postgres_host = os.getenv('POSTGRES_HOST')
-        if postgres_host:
-            # PostgreSQL configuration
-            postgres_port = os.getenv('POSTGRES_PORT', '5432')
-            postgres_db = os.getenv('POSTGRES_DB', 'stockanalyst')
-            postgres_user = os.getenv('POSTGRES_USER', 'stockanalyst')
-            postgres_password = os.getenv('POSTGRES_PASSWORD', 'defaultpassword')
-            
-            self.db_url = f'postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}'
-            logger.info(f"Initializing PortfolioManager with PostgreSQL: {postgres_host}:{postgres_port}/{postgres_db}")
-        else:
-            # SQLite configuration (legacy/fallback)
-            self.db_path = db_path or os.getenv('DATABASE_PATH', 'stock_analysis.db')
-            self.db_url = f'sqlite:///{self.db_path}'
-            logger.info(f"Initializing PortfolioManager with SQLite: {self.db_path}")
-        
-        self.engine = create_engine(self.db_url)
+        self.db_manager = DatabaseManager()
+        logger.info("Initializing PortfolioManager with centralized DatabaseManager")
     
     @log_function_call
     def add_transaction(self, user_id: int, symbol: str, transaction_type: str, 
@@ -54,30 +39,17 @@ class PortfolioManager:
             return {'success': False, 'error': 'Price per share must be greater than 0'}
         
         try:
-            with self.engine.connect() as conn:
-                # Add transaction record - handle both PostgreSQL and SQLite
-                if 'postgresql' in self.db_url:
-                    result = conn.execute(text('''
-                        INSERT INTO portfolio_transactions 
-                        (user_id, symbol, transaction_type, shares, price_per_share, transaction_date, fees, notes)
-                        VALUES (:user_id, :symbol, :transaction_type, :shares, :price_per_share, :transaction_date, :fees, :notes)
-                        RETURNING id
-                    '''), {'user_id': user_id, 'symbol': symbol.upper(), 'transaction_type': transaction_type, 
-                          'shares': shares, 'price_per_share': price_per_share, 'transaction_date': transaction_date, 
-                          'fees': fees, 'notes': notes})
-                    transaction_id = result.fetchone()[0]
-                else:
-                    # SQLite doesn't support RETURNING, use lastrowid
-                    conn.execute(text('''
-                        INSERT INTO portfolio_transactions 
-                        (user_id, symbol, transaction_type, shares, price_per_share, transaction_date, fees, notes)
-                        VALUES (:user_id, :symbol, :transaction_type, :shares, :price_per_share, :transaction_date, :fees, :notes)
-                    '''), {'user_id': user_id, 'symbol': symbol.upper(), 'transaction_type': transaction_type, 
-                          'shares': shares, 'price_per_share': price_per_share, 'transaction_date': transaction_date, 
-                          'fees': fees, 'notes': notes})
-                    # Get the last inserted row ID
-                    result = conn.execute(text('SELECT last_insert_rowid()'))
-                    transaction_id = result.fetchone()[0]
+            with self.db_manager.engine.connect() as conn:
+                # Add transaction record - PostgreSQL only (containerized environment)
+                result = conn.execute(text('''
+                    INSERT INTO portfolio_transactions 
+                    (user_id, symbol, transaction_type, shares, price_per_share, transaction_date, fees, notes)
+                    VALUES (:user_id, :symbol, :transaction_type, :shares, :price_per_share, :transaction_date, :fees, :notes)
+                    RETURNING id
+                '''), {'user_id': user_id, 'symbol': symbol.upper(), 'transaction_type': transaction_type, 
+                      'shares': shares, 'price_per_share': price_per_share, 'transaction_date': transaction_date, 
+                      'fees': fees, 'notes': notes})
+                transaction_id = result.fetchone()[0]
                 
                 # Update portfolio holdings
                 self._update_portfolio_holdings(conn, user_id, symbol.upper())
@@ -122,25 +94,16 @@ class PortfolioManager:
             latest_purchase = result.fetchone()
             purchase_date = latest_purchase[0] if latest_purchase else date.today().isoformat()
             
-            # Insert or update portfolio holding - handle both PostgreSQL and SQLite
-            if 'postgresql' in str(self.engine.url):
-                conn.execute(text('''
-                    INSERT INTO user_portfolios 
-                    (user_id, symbol, shares, purchase_price, purchase_date, updated_at)
-                    VALUES (:user_id, :symbol, :shares, :purchase_price, :purchase_date, CURRENT_TIMESTAMP)
-                    ON CONFLICT (user_id, symbol) DO UPDATE SET
-                    shares = EXCLUDED.shares, purchase_price = EXCLUDED.purchase_price,
-                    purchase_date = EXCLUDED.purchase_date, updated_at = CURRENT_TIMESTAMP
-                '''), {'user_id': user_id, 'symbol': symbol, 'shares': net_shares, 
-                      'purchase_price': avg_price, 'purchase_date': purchase_date})
-            else:
-                # SQLite INSERT OR REPLACE
-                conn.execute(text('''
-                    INSERT OR REPLACE INTO user_portfolios 
-                    (user_id, symbol, shares, purchase_price, purchase_date, updated_at)
-                    VALUES (:user_id, :symbol, :shares, :purchase_price, :purchase_date, CURRENT_TIMESTAMP)
-                '''), {'user_id': user_id, 'symbol': symbol, 'shares': net_shares, 
-                      'purchase_price': avg_price, 'purchase_date': purchase_date})
+            # Insert or update portfolio holding - PostgreSQL only (containerized environment)
+            conn.execute(text('''
+                INSERT INTO user_portfolios 
+                (user_id, symbol, shares, purchase_price, purchase_date, updated_at)
+                VALUES (:user_id, :symbol, :shares, :purchase_price, :purchase_date, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, symbol) DO UPDATE SET
+                shares = EXCLUDED.shares, purchase_price = EXCLUDED.purchase_price,
+                purchase_date = EXCLUDED.purchase_date, updated_at = CURRENT_TIMESTAMP
+            '''), {'user_id': user_id, 'symbol': symbol, 'shares': net_shares, 
+                  'purchase_price': avg_price, 'purchase_date': purchase_date})
             
             logger.debug(f"Updated holding: {net_shares} shares at avg price ${avg_price:.2f}")
         else:
@@ -157,7 +120,7 @@ class PortfolioManager:
         logger.debug(f"Retrieving portfolio for user {user_id}")
         
         try:
-            with self.engine.connect() as conn:
+            with self.db_manager.engine.connect() as conn:
                 # Get portfolio holdings with current stock data
                 result = conn.execute(text('''
                 SELECT 
@@ -233,7 +196,7 @@ class PortfolioManager:
         logger.debug(f"Retrieving transactions for user {user_id}, symbol: {symbol}, limit: {limit}")
         
         try:
-            with self.engine.connect() as conn:
+            with self.db_manager.engine.connect() as conn:
                 query = '''
                     SELECT 
                         id, symbol, transaction_type, shares, price_per_share, 
@@ -348,7 +311,7 @@ class PortfolioManager:
         logger.info(f"Deleting transaction {transaction_id} for user {user_id}")
         
         try:
-            with self.engine.connect() as conn:
+            with self.db_manager.engine.connect() as conn:
                 # Get transaction details before deletion
                 result = conn.execute(text('''
                     SELECT symbol FROM portfolio_transactions 
@@ -380,6 +343,3 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error deleting transaction {transaction_id}: {e}")
             return {'success': False, 'error': 'Failed to delete transaction'}
-        finally:
-            if conn:
-                conn.close()

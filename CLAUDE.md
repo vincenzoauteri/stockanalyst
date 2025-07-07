@@ -2,15 +2,17 @@
 
 This comprehensive guide provides complete instructions for developers working with the Stock Analyst application, consolidating all project documentation and development guidelines.
 
-## Quick Start for Developers
+## IMPORTANT!!!
 
 When working on this application:
 
 1. **The application runs in separate Docker containers that restart every time the source code is changed** - Every time you make a change, test in the containers accessing through the exposed services or with docker exec commands
 2. **First make a plan** of what you plan to modify and ask for confirmation
-3. **After each major change**, run linting and tests to confirm everything is working correctly. Perform regression tests on database, frontend, backend, and API calls
-4. **If the change does not work, do not keep trying new things. Log the part that fails extensively and try to debug from the logs**
-5. **Git commit after each successful change**
+3. **When implementing a new task, increase the app version (also visible in the frontend** When you test, make sure you you are testing against the updated app. 
+4. **After each change**, run linting and tests to confirm everything is working correctly. Perform regression tests on database, frontend, backend, and API calls
+5. **If the change does not work, do not keep trying new things.** Log the part that fails extensively and try to debug from the logs
+6. **Git commit after each successful change** Keep commit messages short.
+7. **Be professional** Be thorough and careful in uour analysis. Don't use emoji or exclamation marks, keep a professional, detached tome.
 
 ## Container Architecture
 
@@ -68,8 +70,8 @@ The application is orchestrated using Docker Compose with multiple specialized c
 
 ### Container Management
 ```bash
-# Start development environment with file watching (auto-rebuild/restart on changes)
-docker compose --profile dev up --watch
+# Start development environment
+docker compose --profile dev up -d
 
 # Start production environment  
 docker compose --profile production up -d
@@ -299,32 +301,6 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **Catchup Strategy** - Enhanced error handling distinguishing rate limits from data unavailability
 - **Intelligent Retry** - 1-day retry mechanism for temporarily unavailable data
 - **Data Validation** - Comprehensive validation and gap tracking
-
-### File Watch & Sync Features
-
-The application supports Docker Compose watch functionality for automatic container rebuilds and restarts when source files change:
-
-**Watch Actions Configured:**
-- **sync+restart**: Synchronizes and restarts containers on any backend source file change (*.py files)
-- **rebuild**: Automatically rebuilds containers when `requirements.txt` changes
-
-**Usage:**
-```bash
-# Start development environment with file watching
-docker compose --profile dev up --watch
-
-# Watch ignores unnecessary files:
-# - logs/, __pycache__/, *.pyc
-# - .git/, .env, docker-compose.yml, Dockerfile*
-# - static/, templates/ (frontend assets)
-```
-
-**Benefits:**
-- Automatic container restart on any backend source file change
-- Faster development iteration cycles
-- Dependency changes trigger full rebuilds
-- Frontend assets (static/, templates/) are ignored to prevent unnecessary restarts
-
 ## Development Guidelines
 
 ### Code Standards

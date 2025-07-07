@@ -10,7 +10,8 @@ import os
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import session, redirect, url_for, flash, request, current_app
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from database import DatabaseManager
 from logging_config import get_logger, log_function_call
 
 logger = get_logger(__name__)
@@ -18,26 +19,10 @@ logger = get_logger(__name__)
 class AuthenticationManager:
     """Handles user authentication and session management"""
     
-    def __init__(self, db_path=None):
+    def __init__(self):
         """Initialize authentication manager"""
-        # Check if we're using PostgreSQL (containerized) or SQLite (legacy)
-        postgres_host = os.getenv('POSTGRES_HOST')
-        if postgres_host:
-            # PostgreSQL configuration
-            postgres_port = os.getenv('POSTGRES_PORT', '5432')
-            postgres_db = os.getenv('POSTGRES_DB', 'stockanalyst')
-            postgres_user = os.getenv('POSTGRES_USER', 'stockanalyst')
-            postgres_password = os.getenv('POSTGRES_PASSWORD', 'defaultpassword')
-            
-            self.db_url = f'postgresql://{postgres_user}:{postgres_password}@{postgres_host}:{postgres_port}/{postgres_db}'
-            logger.info(f"Initializing AuthenticationManager with PostgreSQL: {postgres_host}:{postgres_port}/{postgres_db}")
-        else:
-            # SQLite configuration (legacy/fallback)
-            self.db_path = db_path or os.getenv('DATABASE_PATH', 'stock_analysis.db')
-            self.db_url = f'sqlite:///{self.db_path}'
-            logger.info(f"Initializing AuthenticationManager with SQLite: {self.db_path}")
-        
-        self.engine = create_engine(self.db_url)
+        self.db_manager = DatabaseManager()
+        logger.info("Initializing AuthenticationManager with centralized DatabaseManager")
         self.create_auth_tables()
         
     @log_function_call
@@ -45,164 +30,85 @@ class AuthenticationManager:
         """Create authentication-related database tables"""
         logger.debug("Creating authentication tables...")
         try:
-            with self.engine.connect() as conn:
-                # Users table - handle both PostgreSQL and SQLite
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS users (
-                            id SERIAL PRIMARY KEY,
-                            username TEXT UNIQUE NOT NULL,
-                            email TEXT UNIQUE NOT NULL,
-                            password_hash TEXT NOT NULL,
-                            salt TEXT NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            is_active BOOLEAN DEFAULT true,
-                            last_login TIMESTAMP,
-                            failed_login_attempts INTEGER DEFAULT 0,
-                            locked_until TIMESTAMP
-                        )
-                    '''))
-                else:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS users (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            username TEXT UNIQUE NOT NULL,
-                            email TEXT UNIQUE NOT NULL,
-                            password_hash TEXT NOT NULL,
-                            salt TEXT NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            is_active BOOLEAN DEFAULT 1,
-                            last_login TIMESTAMP,
-                            failed_login_attempts INTEGER DEFAULT 0,
-                            locked_until TIMESTAMP
-                        )
-                    '''))
+            with self.db_manager.engine.connect() as conn:
+                # Users table - PostgreSQL only (containerized environment)
+                conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        username TEXT UNIQUE NOT NULL,
+                        email TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        salt TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT true,
+                        last_login TIMESTAMP,
+                        failed_login_attempts INTEGER DEFAULT 0,
+                        locked_until TIMESTAMP
+                    )
+                '''))
             
                 # User sessions table
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_sessions (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL,
-                            session_token TEXT UNIQUE NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            expires_at TIMESTAMP NOT NULL,
-                            ip_address TEXT,
-                            user_agent TEXT,
-                            is_active BOOLEAN DEFAULT true,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-                        )
-                    '''))
-                else:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_sessions (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            session_token TEXT UNIQUE NOT NULL,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            expires_at TIMESTAMP NOT NULL,
-                            ip_address TEXT,
-                            user_agent TEXT,
-                            is_active BOOLEAN DEFAULT 1,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-                        )
-                    '''))
+                conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS user_sessions (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        session_token TEXT UNIQUE NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP NOT NULL,
+                        ip_address TEXT,
+                        user_agent TEXT,
+                        is_active BOOLEAN DEFAULT true,
+                        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                    )
+                '''))
             
                 # User watchlists table
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_watchlists (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            notes TEXT,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                            UNIQUE(user_id, symbol)
-                        )
-                    '''))
-                else:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_watchlists (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            notes TEXT,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                            UNIQUE(user_id, symbol)
-                        )
-                    '''))
+                conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS user_watchlists (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        symbol TEXT NOT NULL,
+                        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        notes TEXT,
+                        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        UNIQUE(user_id, symbol)
+                    )
+                '''))
             
                 # User portfolios table
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_portfolios (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            shares REAL NOT NULL,
-                            purchase_price REAL NOT NULL,
-                            purchase_date DATE NOT NULL,
-                            purchase_notes TEXT,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                            UNIQUE(user_id, symbol)
-                        )
-                    '''))
-                else:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS user_portfolios (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            shares REAL NOT NULL,
-                            purchase_price REAL NOT NULL,
-                            purchase_date DATE NOT NULL,
-                            purchase_notes TEXT,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-                            UNIQUE(user_id, symbol)
-                        )
-                    '''))
+                conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS user_portfolios (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        symbol TEXT NOT NULL,
+                        shares REAL NOT NULL,
+                        purchase_price REAL NOT NULL,
+                        purchase_date DATE NOT NULL,
+                        purchase_notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                        UNIQUE(user_id, symbol)
+                    )
+                '''))
             
                 # Portfolio transactions table (for detailed tracking)
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS portfolio_transactions (
-                            id SERIAL PRIMARY KEY,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            transaction_type TEXT NOT NULL CHECK (transaction_type IN ('BUY', 'SELL')),
-                            shares REAL NOT NULL,
-                            price_per_share REAL NOT NULL,
-                            transaction_date DATE NOT NULL,
-                            fees REAL DEFAULT 0,
-                            notes TEXT,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-                        )
-                    '''))
-                else:
-                    conn.execute(text('''
-                        CREATE TABLE IF NOT EXISTS portfolio_transactions (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            symbol TEXT NOT NULL,
-                            transaction_type TEXT NOT NULL CHECK (transaction_type IN ('BUY', 'SELL')),
-                            shares REAL NOT NULL,
-                            price_per_share REAL NOT NULL,
-                            transaction_date DATE NOT NULL,
-                            fees REAL DEFAULT 0,
-                            notes TEXT,
-                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
-                        )
-                    '''))
+                conn.execute(text('''
+                    CREATE TABLE IF NOT EXISTS portfolio_transactions (
+                        id SERIAL PRIMARY KEY,
+                        user_id INTEGER NOT NULL,
+                        symbol TEXT NOT NULL,
+                        transaction_type TEXT NOT NULL CHECK (transaction_type IN ('BUY', 'SELL')),
+                        shares REAL NOT NULL,
+                        price_per_share REAL NOT NULL,
+                        transaction_date DATE NOT NULL,
+                        fees REAL DEFAULT 0,
+                        notes TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                    )
+                '''))
             
                 conn.commit()
                 logger.debug("Authentication tables created successfully")
@@ -250,7 +156,7 @@ class AuthenticationManager:
             return {'success': False, 'error': 'Password must be at least 6 characters long'}
         
         try:
-            with self.engine.connect() as conn:
+            with self.db_manager.engine.connect() as conn:
                 # Check if user already exists
                 result = conn.execute(text('SELECT id FROM users WHERE username = :username OR email = :email'), 
                                     {'username': username, 'email': email})
@@ -260,23 +166,13 @@ class AuthenticationManager:
                 # Generate password hash
                 password_hash, salt = self.generate_password_hash(password)
                 
-                # Insert new user - handle both PostgreSQL and SQLite
-                if 'postgresql' in self.db_url:
-                    result = conn.execute(text('''
-                        INSERT INTO users (username, email, password_hash, salt)
-                        VALUES (:username, :email, :password_hash, :salt)
-                        RETURNING id
-                    '''), {'username': username, 'email': email, 'password_hash': password_hash, 'salt': salt})
-                    user_id = result.fetchone()[0]
-                else:
-                    # SQLite doesn't support RETURNING, use lastrowid
-                    conn.execute(text('''
-                        INSERT INTO users (username, email, password_hash, salt)
-                        VALUES (:username, :email, :password_hash, :salt)
-                    '''), {'username': username, 'email': email, 'password_hash': password_hash, 'salt': salt})
-                    # Get the last inserted row ID
-                    result = conn.execute(text('SELECT last_insert_rowid()'))
-                    user_id = result.fetchone()[0]
+                # Insert new user - PostgreSQL only (containerized environment)
+                result = conn.execute(text('''
+                    INSERT INTO users (username, email, password_hash, salt)
+                    VALUES (:username, :email, :password_hash, :salt)
+                    RETURNING id
+                '''), {'username': username, 'email': email, 'password_hash': password_hash, 'salt': salt})
+                user_id = result.fetchone()[0]
                 conn.commit()
                 
                 logger.info(f"User {username} registered successfully with ID: {user_id}")
@@ -292,7 +188,7 @@ class AuthenticationManager:
         logger.info(f"Authenticating user: {username}")
         
         try:
-            with self.engine.connect() as conn:
+            with self.db_manager.engine.connect() as conn:
                 # Get user data
                 result = conn.execute(text('''
                     SELECT id, username, email, password_hash, salt, is_active, 
@@ -378,21 +274,13 @@ class AuthenticationManager:
         logger.debug(f"Validating session token")
         
         try:
-            with self.engine.connect() as conn:
-                if 'postgresql' in self.db_url:
-                    result = conn.execute(text('''
-                        SELECT us.user_id, us.expires_at, u.username, u.email, u.is_active
-                        FROM user_sessions us
-                        JOIN users u ON us.user_id = u.id
-                        WHERE us.session_token = :session_token AND us.is_active = true
-                    '''), {'session_token': session_token})
-                else:
-                    result = conn.execute(text('''
-                        SELECT us.user_id, us.expires_at, u.username, u.email, u.is_active
-                        FROM user_sessions us
-                        JOIN users u ON us.user_id = u.id
-                        WHERE us.session_token = :session_token AND us.is_active = 1
-                    '''), {'session_token': session_token})
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('''
+                    SELECT us.user_id, us.expires_at, u.username, u.email, u.is_active
+                    FROM user_sessions us
+                    JOIN users u ON us.user_id = u.id
+                    WHERE us.session_token = :session_token AND us.is_active = true
+                '''), {'session_token': session_token})
                 
                 session_data = result.fetchone()
                 if not session_data:
@@ -406,12 +294,8 @@ class AuthenticationManager:
                 if datetime.now() > expires_at_dt:
                     logger.debug("Session validation failed: session expired")
                     # Deactivate expired session
-                    if 'postgresql' in self.db_url:
-                        conn.execute(text('UPDATE user_sessions SET is_active = false WHERE session_token = :session_token'), 
-                                {'session_token': session_token})
-                    else:
-                        conn.execute(text('UPDATE user_sessions SET is_active = 0 WHERE session_token = :session_token'), 
-                                {'session_token': session_token})
+                    conn.execute(text('UPDATE user_sessions SET is_active = false WHERE session_token = :session_token'), 
+                            {'session_token': session_token})
                     conn.commit()
                     return {'success': False, 'error': 'Session expired'}
             
@@ -438,13 +322,9 @@ class AuthenticationManager:
         logger.info("Logging out user")
         
         try:
-            with self.engine.connect() as conn:
-                if 'postgresql' in self.db_url:
-                    conn.execute(text('UPDATE user_sessions SET is_active = false WHERE session_token = :session_token'), 
-                               {'session_token': session_token})
-                else:
-                    conn.execute(text('UPDATE user_sessions SET is_active = 0 WHERE session_token = :session_token'), 
-                               {'session_token': session_token})
+            with self.db_manager.engine.connect() as conn:
+                conn.execute(text('UPDATE user_sessions SET is_active = false WHERE session_token = :session_token'), 
+                           {'session_token': session_token})
                 conn.commit()
                 
                 logger.info("User logged out successfully")
@@ -460,17 +340,11 @@ class AuthenticationManager:
         logger.debug("Cleaning up expired sessions")
         
         try:
-            with self.engine.connect() as conn:
-                if 'postgresql' in self.db_url:
-                    result = conn.execute(text('''
-                        UPDATE user_sessions SET is_active = false 
-                        WHERE expires_at < :now AND is_active = true
-                    '''), {'now': datetime.now().isoformat()})
-                else:
-                    result = conn.execute(text('''
-                        UPDATE user_sessions SET is_active = 0 
-                        WHERE expires_at < :now AND is_active = 1
-                    '''), {'now': datetime.now().isoformat()})
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('''
+                    UPDATE user_sessions SET is_active = false 
+                    WHERE expires_at < :now AND is_active = true
+                '''), {'now': datetime.now().isoformat()})
                 
                 deleted_count = result.rowcount
                 conn.commit()
