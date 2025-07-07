@@ -896,8 +896,9 @@ def export_transactions(symbol=None):
             )
         
         else:
-            flash('PDF export not yet implemented', 'info')
-            return redirect(url_for('portfolio_transactions', symbol=symbol))
+            # Unsupported format - default to CSV
+            logger.warning(f"Unsupported export format requested: {format_type}, defaulting to CSV")
+            return redirect(url_for('export_transactions', symbol=symbol, format='csv'))
             
     except Exception as e:
         logger.error(f"Error exporting transactions: {e}")
