@@ -1,7 +1,7 @@
 import pytest
 import os
 import json
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
 from datetime import datetime, date, timedelta
 import pandas as pd
 
@@ -145,25 +145,28 @@ def test_get_company_profile_fmp_api_key_missing(mock_get):
             mock_get.assert_not_called() # FMP API should not be called
 
 @patch('fmp_client.requests.get')
-@patch('yahoo_finance_client.YahooFinanceClient')
-def test_get_company_profile_fmp_fallback(mock_yahoo_client, mock_get, fmp_client):
-    # Simulate FMP API failure or limit exceeded
-    mock_get.return_value.status_code = 403 # Forbidden, e.g., API limit
-    mock_get.return_value.json.return_value = {"error": "API limit reached"}
+def test_get_company_profile_fmp_fallback(mock_get, fmp_client):
+    # Simulate FMP API failure by raising a requests exception
+    import requests
+    mock_get.side_effect = requests.exceptions.RequestException("API error")
 
-    # Mock Yahoo Finance client response
-    mock_yahoo_client_instance = mock_yahoo_client.return_value
-    mock_yahoo_client_instance.get_company_profile.return_value = {
+    # Mock Yahoo Finance client instance and response
+    mock_yahoo_client = MagicMock()
+    mock_yahoo_client.get_company_profile.return_value = {
         'symbol': 'AAPL',
         'companyname': 'Apple Inc. (Yahoo)',
         'source': 'yahoo_finance'
     }
     
+    # Ensure fallback is available
+    fmp_client.fallback_available = True
+    fmp_client.yahoo_client = mock_yahoo_client
+    
     profile = fmp_client.get_company_profile('AAPL')
     assert profile['companyname'] == 'Apple Inc. (Yahoo)'
     assert profile['source'] == 'yahoo_finance'
     mock_get.assert_called_once() # FMP was attempted
-    mock_yahoo_client_instance.get_company_profile.assert_called_once_with('AAPL')
+    mock_yahoo_client.get_company_profile.assert_called_once_with('AAPL')
 
 @patch('fmp_client.requests.get')
 def test_get_historical_prices(mock_get, fmp_client):
@@ -183,18 +186,21 @@ def test_get_historical_prices(mock_get, fmp_client):
     assert fmp_client.usage_tracker.get_daily_usage() == 1
 
 @patch('fmp_client.requests.get')
-@patch('fmp_client.YahooFinanceClient')
-def test_get_fundamentals_summary_fmp_fallback(mock_yahoo_client, mock_get, fmp_client):
+def test_get_fundamentals_summary_fmp_fallback(mock_get, fmp_client):
     # Simulate FMP API failure for all fundamental calls
     mock_get.side_effect = [None, None, None] # Simulate 3 failures for key_metrics, ratios, income_statement
 
     # Mock Yahoo Finance client response
-    mock_yahoo_client_instance = mock_yahoo_client.return_value
+    mock_yahoo_client_instance = MagicMock()
     mock_yahoo_client_instance.get_fundamentals_summary.return_value = {
         'symbol': 'AAPL',
         'pe_ratio': 25.0,
         'source': 'yahoo_finance'
     }
+    
+    # Set up fallback on the client
+    fmp_client.fallback_available = True
+    fmp_client.yahoo_client = mock_yahoo_client_instance
 
     summary = fmp_client.get_fundamentals_summary('AAPL')
     assert summary['source'] == 'yahoo_finance'
@@ -239,6 +245,16 @@ def test_api_request_blocked_by_limit(mock_get, fmp_client):
     # Exhaust the daily limit
     fmp_client.usage_tracker.record_request(250)
     
+    # Mock Yahoo Finance fallback
+    mock_yahoo_client = MagicMock()
+    mock_yahoo_client.get_company_profile.return_value = {
+        'symbol': 'AAPL',
+        'companyname': 'Apple Inc.',
+        'source': 'yahoo_finance'
+    }
+    fmp_client.fallback_available = True
+    fmp_client.yahoo_client = mock_yahoo_client
+    
     profile = fmp_client.get_company_profile('AAPL')
     assert profile is not None # Fallback should be used
     assert profile.get('source') == 'yahoo_finance'
@@ -248,6 +264,17 @@ def test_api_request_blocked_by_limit(mock_get, fmp_client):
 def test_api_request_no_api_key(mock_get):
     with patch.dict(os.environ, {'FMP_API_KEY': ''}):
         client = FMPClient()
+        
+        # Mock Yahoo Finance fallback
+        mock_yahoo_client = MagicMock()
+        mock_yahoo_client.get_company_profile.return_value = {
+            'symbol': 'AAPL',
+            'companyname': 'Apple Inc.',
+            'source': 'yahoo_finance'
+        }
+        client.fallback_available = True
+        client.yahoo_client = mock_yahoo_client
+        
         profile = client.get_company_profile('AAPL')
         assert profile is not None # Fallback should be used
         assert profile.get('source') == 'yahoo_finance'
