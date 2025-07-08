@@ -5,15 +5,11 @@ Autonomous daily updates respecting FMP free tier limits (250 requests/day)
 Refactored to use common DataFetcher module
 """
 
-import os
 import sys
-import time
 import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from database import DatabaseManager
+from datetime import datetime
+from typing import List, Dict
 from data_fetcher import DataFetcher
-from sqlalchemy import text
 
 # Configure logging
 logging.basicConfig(

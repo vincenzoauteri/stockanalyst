@@ -1,7 +1,6 @@
 import psutil
 import time
 import os
-import signal
 import json
 import subprocess
 from pathlib import Path

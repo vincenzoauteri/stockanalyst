@@ -13,7 +13,6 @@ import time
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List
 
 import schedule
 from sqlalchemy import text
@@ -26,7 +25,7 @@ try:
     from fmp_client import FMPClient
     from yahoo_finance_client import YahooFinanceClient
     from gap_detector import GapDetector
-    from logging_config import setup_logging, log_background_task, get_background_logger
+    from logging_config import setup_logging, log_background_task
 except ImportError as e:
     print(f"Error: Failed to import local modules. Details: {e}")
     sys.exit(1)
@@ -166,7 +165,7 @@ class Scheduler:
             self._save_status()
 
     def run_catchup_operation(self):
-        logger.info(f"Starting aggressive catch-up operation...")
+        logger.info("Starting aggressive catch-up operation...")
         try:
             # Check if we're in a rate limit pause
             current_time = datetime.now()
@@ -447,7 +446,7 @@ def handle_status():
     """Displays the current status of the scheduler."""
     status_info = service_manager.get_status()
     if status_info.get('running'):
-        print(f"Scheduler Status: RUNNING")
+        print("Scheduler Status: RUNNING")
         print(f"  PID: {status_info.get('pid')}")
         if 'timestamp' in status_info:
             start_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(status_info['timestamp']))

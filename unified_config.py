@@ -11,7 +11,7 @@ class BaseConfig:
     """Base configuration with all settings"""
     
     # Application Configuration
-    APP_VERSION = "0.0.16"
+    APP_VERSION = "0.0.17"
     
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')
@@ -179,6 +179,27 @@ class BaseConfig:
     # Flask/Web Application Configuration
     DEBUG = False
     SECRET_KEY = os.getenv('SECRET_KEY', 'change-me-in-production')
+    
+    # Redis Configuration (for caching)
+    REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+    REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+    REDIS_DB = int(os.getenv('REDIS_DB', '0'))
+    REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
+    REDIS_ENABLED = os.getenv('REDIS_ENABLED', 'false').lower() == 'true'
+    
+    # Cache Configuration
+    CACHE_TYPE = 'redis' if REDIS_ENABLED else 'simple'
+    CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
+    CACHE_KEY_PREFIX = 'stockanalyst:'
+    
+    # Cache timeouts for different data types
+    CACHE_TIMEOUTS = {
+        'company_profile': 3600,      # 1 hour - relatively stable data
+        'undervaluation_score': 1800, # 30 minutes - updated periodically
+        'sector_analysis': 1800,      # 30 minutes - aggregated data
+        'stock_basic_info': 86400,    # 24 hours - very stable data
+        'historical_prices': 300,     # 5 minutes - can change during market hours
+    }
     
     @classmethod
     def get_market_holidays_as_dates(cls, year=2025):

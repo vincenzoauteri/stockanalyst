@@ -1,13 +1,13 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from database import DatabaseManager
 from fmp_client import FMPClient
 from sqlalchemy import text
 import warnings
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 warnings.filterwarnings('ignore')
@@ -359,7 +359,7 @@ class UndervaluationAnalyzer:
                         'insufficient_data': True
                     })
         
-        logger.info(f"Fundamentals data collection complete:")
+        logger.info("Fundamentals data collection complete:")
         logger.info(f"  Cache hits: {cache_hits}")
         logger.info(f"  API calls: {api_calls}")
         logger.info(f"  Total symbols processed: {len(base_df)}")

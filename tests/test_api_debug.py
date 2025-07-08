@@ -6,7 +6,6 @@ Debug API Tests - See what's actually happening
 import os
 import sys
 import json
-from unittest.mock import patch, MagicMock
 
 # Set environment variables before importing
 os.environ.update({

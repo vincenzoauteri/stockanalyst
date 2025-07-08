@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 import json
 import time
 from pathlib import Path
-from logging_config import get_logger, log_function_call, log_api_request
+from logging_config import get_logger, log_api_request
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -58,7 +58,7 @@ class APIUsageTracker:
         last_reset = self.usage_data.get('last_reset', today)
         
         if today != last_reset:
-            logger.info(f"New day detected. Resetting daily usage counter.")
+            logger.info("New day detected. Resetting daily usage counter.")
             self.usage_data['last_reset'] = today
             # Keep historical data but don't let it grow indefinitely
             daily_usage = self.usage_data.get('daily_usage', {})

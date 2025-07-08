@@ -6,7 +6,6 @@ Tests for all missing endpoints and edge cases in api_routes.py
 
 import os
 import sys
-import json
 from datetime import date, datetime
 from unittest.mock import patch, MagicMock
 
@@ -82,7 +81,6 @@ def test_api_service_imports():
 
 def test_financial_endpoints_comprehensive_coverage():
     """Test that all financial endpoints are properly implemented"""
-    from api_routes import api_v2
     
     expected_endpoints = [
         # Stock endpoints
@@ -121,7 +119,6 @@ def test_financial_endpoints_comprehensive_coverage():
 
 def test_error_handlers_exist():
     """Test that error handlers are properly defined"""
-    from api_routes import api_v2
     
     # Check that error handlers are defined in the blueprint
     # This tests the structural completeness

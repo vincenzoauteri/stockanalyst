@@ -1,9 +1,7 @@
 import pytest
-from flask import session
 from unittest.mock import patch, MagicMock
 import json
-from datetime import datetime, date, timedelta
-import pandas as pd
+from datetime import date
 import os
 
 # Mock environment variables before importing app

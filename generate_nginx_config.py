@@ -5,7 +5,6 @@ Usage: python generate_nginx_config.py [upstream_host] [upstream_port]
 """
 
 import sys
-import os
 from pathlib import Path
 
 

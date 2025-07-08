@@ -8,17 +8,25 @@ Uses separate data access layer for better separation of concerns
 import json
 import os
 import signal
+import sqlite3
 import sys
 import threading
-import time
 from datetime import datetime, date
+
+# Try to import orjson for faster JSON processing
+try:
+    import orjson
+    HAS_ORJSON = True
+except ImportError:
+    HAS_ORJSON = False
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from werkzeug.serving import make_server
+from flask_assets import Environment, Bundle
 
 from api_documentation import create_api_documentation
 from api_routes import api_v2
-from auth import login_required, get_current_user
+from auth import login_required
 from logging_config import setup_logging, get_logger
 from services import (
     get_stock_service,
@@ -28,6 +36,7 @@ from services import (
     get_portfolio_manager
 )
 from unified_config import get_config
+from cache_utils import init_cache
 
 # Configure centralized logging
 setup_logging(log_level="INFO", enable_file_logging=True, enable_console_logging=True)
@@ -54,6 +63,30 @@ def inject_config():
     """Inject configuration into template context"""
     return {'config': get_config()}
 
+# Initialize cache
+init_cache(app)
+
+# Initialize Flask-Assets
+assets = Environment(app)
+assets.url = app.static_url_path
+assets.directory = app.static_folder
+
+# Define asset bundles for CSS and JS
+css_bundle = Bundle(
+    'css/style.css',
+    filters='cssmin',
+    output='gen/packed.css'
+)
+assets.register('css_all', css_bundle)
+
+js_bundle = Bundle(
+    'js/app.js',
+    'js/chart.js',
+    filters='jsmin',
+    output='gen/packed.js'
+)
+assets.register('js_all', js_bundle)
+
 # Register API blueprint
 app.register_blueprint(api_v2)
 
@@ -69,6 +102,15 @@ except Exception as e:
 # Add JSON filter for templates with date serialization support
 @app.template_filter('tojsonfilter')
 def to_json_filter(obj):
+    if HAS_ORJSON:
+        try:
+            # orjson handles datetime objects natively and is faster
+            return orjson.dumps(obj, option=orjson.OPT_SERIALIZE_DATETIME).decode('utf-8')
+        except (TypeError, ValueError):
+            # Fall back to standard json if orjson fails
+            pass
+    
+    # Standard json fallback
     def date_serializer(o):
         if isinstance(o, (datetime, date)):
             return o.isoformat()

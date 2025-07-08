@@ -4,9 +4,8 @@ Portfolio Management System for Stock Analyst Application
 Handles user portfolios, transactions, and performance calculations
 """
 
-import os
 from datetime import datetime, date
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 from sqlalchemy import text
 from database import DatabaseManager
 from logging_config import get_logger, log_function_call

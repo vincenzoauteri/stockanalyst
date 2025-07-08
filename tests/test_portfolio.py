@@ -1,10 +1,7 @@
 import pytest
 import sqlite3
 import os
-from datetime import datetime, date
-from unittest.mock import MagicMock, patch
 from portfolio import PortfolioManager
-from database import DatabaseManager
 
 @pytest.fixture
 def temp_db():

@@ -11,3 +11,7 @@ yamllint
 yfinance
 lxml
 psutil
+redis>=5.0.0
+flask-caching>=2.0.0
+orjson>=3.9.0
+flask-assets>=2.0.0

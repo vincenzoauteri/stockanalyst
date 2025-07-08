@@ -5,7 +5,6 @@ Similar to view_api_log.py but for Yahoo Finance requests
 """
 
 import sys
-import os
 from yahoo_finance_client import YahooFinanceClient
 
 def main():
@@ -25,7 +24,7 @@ def main():
     if num_entries:
         log_entries = log_entries[-num_entries:]
     
-    print(f"\n=== Yahoo Finance API Request Log ===")
+    print("\n=== Yahoo Finance API Request Log ===")
     print(f"Showing {'last ' + str(num_entries) if num_entries else 'all'} entries\n")
     
     for entry in log_entries:

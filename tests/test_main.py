@@ -1,8 +1,6 @@
 import pytest
 import pandas as pd
-import time
 from unittest.mock import patch, MagicMock, call
-from sqlalchemy import text
 import os
 
 # Mock environment variables before importing main

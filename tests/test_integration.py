@@ -1,10 +1,9 @@
 import pytest
 import os
 import tempfile
-import json
 import pandas as pd
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch
 from datetime import datetime, date, timedelta
 import sqlite3
 import threading
@@ -25,8 +24,6 @@ from main import StockAnalyst
 from scheduler import Scheduler
 from database import DatabaseManager
 from data_access_layer import StockDataService
-from fmp_client import FMPClient
-from yahoo_finance_client import YahooFinanceClient
 from undervaluation_analyzer import UndervaluationAnalyzer
 from auth import AuthenticationManager
 from portfolio import PortfolioManager

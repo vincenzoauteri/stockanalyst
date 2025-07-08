@@ -1,10 +1,7 @@
 import pytest
-import sqlite3
-from flask import session
 from unittest.mock import patch, MagicMock
 import json
-from datetime import datetime, date, timedelta
-import pandas as pd
+from datetime import datetime, date
 import os
 
 # Mock environment variables before importing app and api_routes
@@ -20,11 +17,6 @@ def mock_env_vars():
 # Import app and api_v2 after env vars are mocked
 from app import app
 from api_routes import api_v2
-from data_access_layer import StockDataService
-from fmp_client import FMPClient
-from undervaluation_analyzer import UndervaluationAnalyzer
-from auth import AuthenticationManager
-from portfolio import PortfolioManager
 
 @pytest.fixture
 def client():

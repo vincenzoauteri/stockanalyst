@@ -6,7 +6,7 @@ Identifies missing data periods and prioritizes backfilling
 
 import logging
 from datetime import datetime, timedelta, date
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional
 from dataclasses import dataclass
 from database import DatabaseManager
 from sqlalchemy import text
@@ -446,7 +446,7 @@ def main():
     print("Running comprehensive gap detection...")
     gaps = detector.detect_all_gaps()
     
-    print(f"\nGap Detection Results:")
+    print("\nGap Detection Results:")
     print(f"{'='*50}")
     
     total_gaps = sum(len(gap_list) for gap_list in gaps.values())

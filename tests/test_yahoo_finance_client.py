@@ -1,8 +1,7 @@
 import pytest
 import pandas as pd
 from unittest.mock import patch, MagicMock
-from datetime import datetime, date, timedelta
-import yfinance as yf
+from datetime import datetime, date
 
 # Import the client after setting up mocks if needed, though for yfinance it's often fine directly
 from yahoo_finance_client import YahooFinanceClient

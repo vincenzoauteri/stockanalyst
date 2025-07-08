@@ -61,7 +61,7 @@ def check_records():
         ''')
         
         recent_updates = cursor.fetchall()
-        print(f"\n🔄 Recently Updated Symbols:")
+        print("\n🔄 Recently Updated Symbols:")
         for symbol, records, latest in recent_updates:
             print(f"   {symbol}: {records} records (latest: {latest})")
         

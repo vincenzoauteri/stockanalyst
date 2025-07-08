@@ -1,13 +1,9 @@
 import pytest
 import os
-import signal
 import tempfile
 import json
-import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-from datetime import datetime, timedelta
-import threading
+from unittest.mock import patch, MagicMock
 
 # Mock environment variables before importing scheduler
 @pytest.fixture(autouse=True)
@@ -34,7 +30,7 @@ def mock_imports():
     ):
         yield
 
-from scheduler import Scheduler, main, handle_status, handle_start, handle_stop, is_running
+from scheduler import Scheduler, main, handle_start, is_running
 
 @pytest.fixture
 def temp_files():

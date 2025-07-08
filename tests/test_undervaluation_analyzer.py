@@ -1,8 +1,7 @@
 import pytest
 import pandas as pd
-import numpy as np
 from unittest.mock import MagicMock, patch, mock_open
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import json
 import os
 

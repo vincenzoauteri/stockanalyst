@@ -5,8 +5,6 @@ Processes automatic recalculation requests triggered by database changes
 """
 
 import time
-import logging
-from datetime import datetime
 from typing import List, Dict
 from database import DatabaseManager
 from yfinance_undervaluation_calculator import YFinanceUndervaluationCalculator

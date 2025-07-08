@@ -2,10 +2,9 @@ import pytest
 import os
 import sqlite3
 import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 import pandas as pd
-from datetime import datetime, date
+from datetime import date
 import requests
 from sqlalchemy.exc import SQLAlchemyError
 import json
@@ -24,10 +23,8 @@ def mock_env_vars():
 from database import DatabaseManager
 from data_access_layer import StockDataService
 from fmp_client import FMPClient
-from yahoo_finance_client import YahooFinanceClient
 from auth import AuthenticationManager
 from portfolio import PortfolioManager
-from main import StockAnalyst
 
 # --- Database Error Handling Tests ---
 
@@ -435,7 +432,6 @@ def test_extreme_numerical_values():
 def test_concurrent_database_write_conflicts():
     """Test handling of concurrent database write conflicts"""
     import threading
-    import time
     
     with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as f:
         db_path = f.name

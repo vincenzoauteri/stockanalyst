@@ -1,9 +1,7 @@
 import pytest
 import pandas as pd
-import sqlite3
 from data_access_layer import StockDataService
 from database import DatabaseManager
-from sqlalchemy import text
 
 @pytest.fixture
 def db_manager_with_data():

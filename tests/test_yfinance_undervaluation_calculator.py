@@ -5,8 +5,7 @@ Tests the Yahoo Finance-based undervaluation scoring system
 """
 
 import pytest
-import pandas as pd
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime
 import os
 

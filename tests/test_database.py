@@ -1,11 +1,8 @@
 import pytest
 import pandas as pd
-import sqlite3
 import os
-from unittest.mock import patch, MagicMock
-from datetime import datetime, date
-from sqlalchemy import text, create_engine
-from sqlalchemy.exc import SQLAlchemyError
+from unittest.mock import patch
+from sqlalchemy import text
 
 # Mock environment variables before importing DatabaseManager
 @pytest.fixture(autouse=True)

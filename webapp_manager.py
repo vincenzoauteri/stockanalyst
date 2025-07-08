@@ -77,7 +77,7 @@ def status():
     """Show webapp status."""
     status_info = webapp_service.get_status()
     if status_info.get('running'):
-        print(f"Webapp Status: RUNNING")
+        print("Webapp Status: RUNNING")
         print(f"  PID: {status_info.get('pid')}")
         print(f"  Access: http://localhost:{APP_PORT}")
         if 'timestamp' in status_info:

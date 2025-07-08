@@ -7,10 +7,8 @@ Configurable entry point for both development and production environments
 import os
 import sys
 import logging
-import threading
 import signal
 import argparse
-from pathlib import Path
 from app import app
 
 class WebAppLauncher:

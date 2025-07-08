@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from database import DatabaseManager
 from sqlalchemy import text
 import logging
+from cache_utils import cached_function, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +217,7 @@ class StockDataService:
             'sectors': sorted(list(sectors))
         }
     
+    @cached_function(timeout=get_config().CACHE_TIMEOUTS['stock_basic_info'], key_prefix='stock_basic_info')
     def get_stock_basic_info(self, symbol: str) -> Optional[Dict]:
         """
         Get basic S&P 500 information for a stock
@@ -251,6 +253,7 @@ class StockDataService:
             logger.error(f"Error getting basic info for {symbol}: {e}")
             return None
     
+    @cached_function(timeout=get_config().CACHE_TIMEOUTS['company_profile'], key_prefix='company_profile')
     def get_stock_company_profile(self, symbol: str) -> Optional[Dict]:
         """
         Get company profile for a stock
@@ -284,6 +287,7 @@ class StockDataService:
             logger.error(f"Error getting company profile for {symbol}: {e}")
             return None
     
+    @cached_function(timeout=get_config().CACHE_TIMEOUTS['undervaluation_score'], key_prefix='undervaluation_score')
     def get_stock_undervaluation_score(self, symbol: str) -> Optional[Dict]:
         """
         Get undervaluation score for a stock
@@ -434,6 +438,7 @@ class StockDataService:
             logger.error(f"Error getting stocks for sector {sector}: {e}")
             return []
     
+    @cached_function(timeout=get_config().CACHE_TIMEOUTS['sector_analysis'], key_prefix='sector_analysis')
     def get_sector_analysis(self) -> List[Dict]:
         """
         Get sector-level analysis with aggregated undervaluation scores

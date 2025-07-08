@@ -7,11 +7,10 @@ Uses yfinance library for free access to Yahoo Finance data
 
 import logging
 import pandas as pd
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+from datetime import datetime
 import time
 import yfinance as yf
-import requests
 
 logger = logging.getLogger(__name__)
 

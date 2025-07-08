@@ -6,10 +6,9 @@ Provides registration, login, logout, and session management functionality
 
 import hashlib
 import secrets
-import os
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import session, redirect, url_for, flash, request, current_app
+from flask import session, redirect, url_for, flash, request
 from sqlalchemy import text
 from database import DatabaseManager
 from logging_config import get_logger, log_function_call
@@ -271,7 +270,7 @@ class AuthenticationManager:
     @log_function_call
     def validate_session(self, session_token: str) -> dict:
         """Validate session token and return user data"""
-        logger.debug(f"Validating session token")
+        logger.debug("Validating session token")
         
         try:
             with self.db_manager.engine.connect() as conn:

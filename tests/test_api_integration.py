@@ -7,8 +7,7 @@ Tests actual API functionality with mocked services
 import os
 import sys
 import json
-import requests
-from datetime import date, datetime
+from datetime import date
 from unittest.mock import patch, MagicMock
 
 # Set environment variables before importing

@@ -16,7 +16,6 @@ def auth_manager():
     yield manager
     
     # Clean up temp database
-    import os
     try:
         os.unlink(db_path)
     except OSError:

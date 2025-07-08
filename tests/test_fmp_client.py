@@ -1,9 +1,7 @@
 import pytest
 import os
-import json
 from unittest.mock import patch, mock_open, MagicMock
-from datetime import datetime, date, timedelta
-import pandas as pd
+from datetime import date, timedelta
 
 # Mock the os.getenv for FMP_API_KEY before importing FMPClient
 @pytest.fixture(autouse=True)

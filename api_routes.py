@@ -14,7 +14,6 @@ from services import (
     get_stock_service,
     get_fmp_client,
     get_undervaluation_analyzer,
-    get_auth_manager,
     get_portfolio_manager
 )
 

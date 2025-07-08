@@ -8,7 +8,6 @@ import argparse
 import pandas as pd
 import numpy as np
 from database import DatabaseManager
-from fmp_client import FMPClient
 from undervaluation_analyzer import UndervaluationAnalyzer
 from sqlalchemy import text
 import time
@@ -91,7 +90,7 @@ def demo_mode():
                 
             print(f"{score['symbol']:<6} | Score: {score_val:5.1f} | {category}")
         
-        print(f"\n📊 Summary:")
+        print("\n📊 Summary:")
         valid_scores = [s['undervaluation_score'] for s in demo_scores if s['undervaluation_score']]
         print(f"   • Total analyzed: {len(demo_scores)}")
         print(f"   • Average score: {np.mean(valid_scores):.1f}")

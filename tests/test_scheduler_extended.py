@@ -5,8 +5,7 @@ Tests scheduler logic, gap detection, and background task management
 """
 
 import pytest
-import time
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 import os
 

@@ -2,7 +2,6 @@
 
 import unittest
 import time
-import os
 import sys
 from pathlib import Path
 import psutil

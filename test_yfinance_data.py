@@ -7,9 +7,6 @@ Test script to explore yfinance data structure for:
 """
 
 import yfinance as yf
-import pandas as pd
-import json
-from datetime import datetime, timedelta
 
 def test_corporate_actions(symbol="AAPL"):
     """Test corporate actions data from yfinance"""

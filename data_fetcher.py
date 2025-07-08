@@ -6,12 +6,10 @@ Provides shared functionality for daily updates and catch-up operations
 
 import time
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Dict, List
 from database import DatabaseManager
 from fmp_client import FMPClient
-from sqlalchemy import text
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
