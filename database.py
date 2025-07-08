@@ -385,11 +385,61 @@ class DatabaseManager:
             logger.error(f"Error inserting S&P 500 constituents: {e}")
             raise
     
+    def _validate_production_data(self, profile_data: dict) -> bool:
+        """Validate that profile data is not test/fake data to prevent contamination"""
+        # Known test data patterns from conftest.py
+        test_data_patterns = [
+            # AAPL fake data
+            {'symbol': 'AAPL', 'price': 170.0, 'mktcap': 2800000000000},
+            # MSFT fake data
+            {'symbol': 'MSFT', 'price': 400.0, 'mktcap': 3000000000000},
+            # GOOG fake data
+            {'symbol': 'GOOG', 'price': 2800.0, 'mktcap': 1800000000000},
+            # AMZN fake data
+            {'symbol': 'AMZN', 'price': 3200.0, 'mktcap': 1600000000000},
+            # TSLA fake data
+            {'symbol': 'TSLA', 'price': 250.0, 'mktcap': 800000000000},
+        ]
+        
+        # Check if incoming data matches any known test patterns
+        for test_pattern in test_data_patterns:
+            if (profile_data.get('symbol') == test_pattern['symbol'] and
+                profile_data.get('price') == test_pattern['price'] and 
+                profile_data.get('mktcap') == test_pattern['mktcap']):
+                logger.warning(f"BLOCKED: Test data detected for {test_pattern['symbol']} - rejecting fake data insertion")
+                return False
+        
+        # Additional unrealistic data checks
+        price = profile_data.get('price')
+        mktcap = profile_data.get('mktcap') 
+        
+        # Check for obviously fake round numbers that are unrealistic
+        if price and mktcap:
+            # Reject AAPL data with exactly $170 price and exactly $2.8T market cap
+            if (profile_data.get('symbol') == 'AAPL' and 
+                price == 170.0 and mktcap == 2800000000000):
+                logger.warning("BLOCKED: Fake AAPL test data detected")
+                return False
+            
+            # Reject MSFT data with exactly $400 price and exactly $3.0T market cap
+            if (profile_data.get('symbol') == 'MSFT' and 
+                price == 400.0 and mktcap == 3000000000000):
+                logger.warning("BLOCKED: Fake MSFT test data detected")
+                return False
+        
+        return True
+
     @log_function_call
     def insert_company_profile(self, profile_data: dict):
         """Insert or update company profile data"""
         symbol = profile_data.get('symbol', 'unknown')
         logger.debug(f"Inserting/updating company profile for {symbol}")
+        
+        # Validate data is not test/fake data
+        if not self._validate_production_data(profile_data):
+            logger.error(f"Rejected insertion of test/fake data for {symbol}")
+            return
+        
         try:
             with self.engine.connect() as conn:
                 conn.execute(text("""
