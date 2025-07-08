@@ -10,6 +10,9 @@ from datetime import time, date
 class BaseConfig:
     """Base configuration with all settings"""
     
+    # Application Configuration
+    APP_VERSION = "0.0.16"
+    
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')
     FMP_FREE_TIER_DAILY_LIMIT = 250

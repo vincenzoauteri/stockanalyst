@@ -64,7 +64,7 @@
     <div class="card-header">
         <h5 class="mb-0">
             <i class="fas fa-list me-2"></i>Stock List
-            <span class="badge bg-secondary ms-2" id="stockCount">{{ stocks|length }}</span>
+            <span class="badge bg-secondary ms-2" id="stockCount">{{ pagination.total_count if pagination else stocks|length }}</span>
         </h5>
     </div>
     <div class="card-body p-0">
@@ -185,6 +185,90 @@
             </table>
         </div>
     </div>
+    
+    <!-- Pagination -->
+    {% if pagination.total_pages > 1 %}
+    <div class="card-footer">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <p class="text-muted mb-0">
+                    Showing {{ ((pagination.current_page - 1) * pagination.per_page) + 1 }} to 
+                    {{ [pagination.current_page * pagination.per_page, pagination.total_count] | min }} 
+                    of {{ pagination.total_count }} stocks
+                </p>
+            </div>
+            <div class="col-md-6">
+                <nav aria-label="Stock pagination">
+                    <ul class="pagination justify-content-end mb-0">
+                        <!-- Previous -->
+                        {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('index', page=pagination.current_page-1, 
+                                                                per_page=pagination.per_page, 
+                                                                sector=filters.sector, 
+                                                                min_score=filters.min_score,
+                                                                max_score=filters.max_score,
+                                                                sort=filters.sort,
+                                                                order=filters.order) }}">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-chevron-left"></i></span>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Page numbers -->
+                        {% for page_num in range(1, pagination.total_pages + 1) %}
+                            {% if page_num == pagination.current_page %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ page_num }}</span>
+                                </li>
+                            {% elif page_num == 1 or page_num == pagination.total_pages or 
+                                    (page_num >= pagination.current_page - 2 and page_num <= pagination.current_page + 2) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('index', page=page_num, 
+                                                                        per_page=pagination.per_page, 
+                                                                        sector=filters.sector, 
+                                                                        min_score=filters.min_score,
+                                                                        max_score=filters.max_score,
+                                                                        sort=filters.sort,
+                                                                        order=filters.order) }}">
+                                        {{ page_num }}
+                                    </a>
+                                </li>
+                            {% elif page_num == pagination.current_page - 3 or page_num == pagination.current_page + 3 %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <!-- Next -->
+                        {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('index', page=pagination.current_page+1, 
+                                                                per_page=pagination.per_page, 
+                                                                sector=filters.sector, 
+                                                                min_score=filters.min_score,
+                                                                max_score=filters.max_score,
+                                                                sort=filters.sort,
+                                                                order=filters.order) }}">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-chevron-right"></i></span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- No Results Message -->

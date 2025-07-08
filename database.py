@@ -271,9 +271,88 @@ class DatabaseManager:
             """))
             
             logger.debug("Database tables created successfully")
+            
+            # Create performance indexes in a separate connection to avoid connection issues
+            self.create_indexes_safe()
+            
         except Exception as e:
             logger.error(f"Error creating database tables: {e}")
             raise
+    
+    @log_function_call
+    def create_indexes(self, conn):
+        """Create performance indexes for frequently queried columns"""
+        logger.debug("Creating performance indexes...")
+        
+        indexes = [
+            # Primary symbol indexes for fast lookups
+            "CREATE INDEX IF NOT EXISTS idx_company_profiles_symbol ON company_profiles(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_historical_prices_symbol ON historical_prices(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_undervaluation_scores_symbol ON undervaluation_scores(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_corporate_actions_symbol ON corporate_actions(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_income_statements_symbol ON income_statements(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_balance_sheets_symbol ON balance_sheets(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_cash_flow_statements_symbol ON cash_flow_statements(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_analyst_recommendations_symbol ON analyst_recommendations(symbol)",
+            
+            # Date-based indexes for time-series queries
+            "CREATE INDEX IF NOT EXISTS idx_historical_prices_date ON historical_prices(date)",
+            "CREATE INDEX IF NOT EXISTS idx_historical_prices_symbol_date ON historical_prices(symbol, date)",
+            "CREATE INDEX IF NOT EXISTS idx_income_statements_period ON income_statements(period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_balance_sheets_period ON balance_sheets(period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_cash_flow_statements_period ON cash_flow_statements(period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_corporate_actions_date ON corporate_actions(action_date)",
+            
+            # Compound indexes for common query patterns
+            "CREATE INDEX IF NOT EXISTS idx_income_statements_symbol_period ON income_statements(symbol, period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_balance_sheets_symbol_period ON balance_sheets(symbol, period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_cash_flow_statements_symbol_period ON cash_flow_statements(symbol, period_ending)",
+            "CREATE INDEX IF NOT EXISTS idx_corporate_actions_symbol_date ON corporate_actions(symbol, action_date)",
+            
+            # Sector and filtering indexes
+            "CREATE INDEX IF NOT EXISTS idx_sp500_constituents_sector ON sp500_constituents(sector)",
+            "CREATE INDEX IF NOT EXISTS idx_company_profiles_sector ON company_profiles(sector)",
+            "CREATE INDEX IF NOT EXISTS idx_undervaluation_scores_sector ON undervaluation_scores(sector)",
+            "CREATE INDEX IF NOT EXISTS idx_undervaluation_scores_score ON undervaluation_scores(undervaluation_score)",
+            
+            # Gap detection indexes
+            "CREATE INDEX IF NOT EXISTS idx_data_gaps_symbol ON data_gaps(symbol)",
+            "CREATE INDEX IF NOT EXISTS idx_data_gaps_type ON data_gaps(gap_type)",
+            "CREATE INDEX IF NOT EXISTS idx_data_gaps_status ON data_gaps(status)",
+            "CREATE INDEX IF NOT EXISTS idx_data_gaps_priority ON data_gaps(priority)",
+            
+            # Market cap and price indexes for sorting
+            "CREATE INDEX IF NOT EXISTS idx_company_profiles_mktcap ON company_profiles(mktcap)",
+            "CREATE INDEX IF NOT EXISTS idx_company_profiles_price ON company_profiles(price)",
+            "CREATE INDEX IF NOT EXISTS idx_undervaluation_scores_mktcap ON undervaluation_scores(mktcap)",
+        ]
+        
+        for index_sql in indexes:
+            try:
+                conn.execute(text(index_sql))
+                logger.debug(f"Created index: {index_sql.split('idx_')[1].split(' ')[0]}")
+            except Exception as e:
+                # Only log specific errors, not connection closed errors
+                error_msg = str(e).lower()
+                if "already exists" in error_msg or "duplicate" in error_msg:
+                    logger.debug(f"Index already exists: {index_sql.split('idx_')[1].split(' ')[0]}")
+                else:
+                    logger.warning(f"Index creation failed: {e}")
+        
+        try:
+            conn.commit()
+            logger.debug("Performance indexes created successfully")
+        except Exception as e:
+            logger.warning(f"Failed to commit index creation: {e}")
+    
+    @log_function_call
+    def create_indexes_safe(self):
+        """Create performance indexes with a separate connection to avoid connection issues"""
+        try:
+            with self.engine.connect() as conn:
+                self.create_indexes(conn)
+        except Exception as e:
+            logger.warning(f"Failed to create indexes: {e}")
     
     @log_function_call
     def insert_sp500_constituents(self, df: pd.DataFrame):

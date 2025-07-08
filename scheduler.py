@@ -398,6 +398,10 @@ service_manager = EnhancedProcessManager(
     working_dir='/app'
 )
 
+def is_running():
+    """Check if the scheduler is running. Used by tests."""
+    return service_manager.is_running()
+
 def handle_start():
     """Starts the scheduler as a background process."""
     print("Starting scheduler as a background service...")

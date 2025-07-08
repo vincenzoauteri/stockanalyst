@@ -20,16 +20,80 @@ class StockDataService:
     def __init__(self):
         self.db_manager = DatabaseManager()
     
-    def get_all_stocks_with_scores(self) -> List[Dict]:
+    def get_all_stocks_with_scores(self, 
+                                   sector: Optional[str] = None,
+                                   min_score: Optional[float] = None,
+                                   max_score: Optional[float] = None,
+                                   sort_by: str = 'symbol',
+                                   sort_order: str = 'asc',
+                                   limit: Optional[int] = None,
+                                   offset: Optional[int] = None) -> List[Dict]:
         """
         Get all S&P 500 stocks with their profiles and undervaluation scores
         
+        Args:
+            sector: Filter by sector (optional)
+            min_score: Minimum undervaluation score (optional)
+            max_score: Maximum undervaluation score (optional)
+            sort_by: Field to sort by (symbol, score, price, market_cap, sector)
+            sort_order: Sort order (asc, desc)
+            limit: Maximum number of results to return
+            offset: Number of results to skip (for pagination)
+            
         Returns:
             List of dictionaries containing stock information
         """
         try:
             with self.db_manager.engine.connect() as conn:
-                query = text("""
+                # Build dynamic WHERE clause
+                where_conditions = []
+                params = {}
+                
+                if sector:
+                    where_conditions.append("s.sector = :sector")
+                    params['sector'] = sector
+                
+                if min_score is not None:
+                    where_conditions.append("u.undervaluation_score >= :min_score")
+                    params['min_score'] = min_score
+                
+                if max_score is not None:
+                    where_conditions.append("u.undervaluation_score <= :max_score")
+                    params['max_score'] = max_score
+                
+                where_clause = ""
+                if where_conditions:
+                    where_clause = "WHERE " + " AND ".join(where_conditions)
+                
+                # Build ORDER BY clause
+                sort_column_map = {
+                    'symbol': 's.symbol',
+                    'score': 'u.undervaluation_score',
+                    'price': 'p.price',
+                    'market_cap': 'p.mktcap',
+                    'sector': 's.sector'
+                }
+                
+                sort_column = sort_column_map.get(sort_by, 's.symbol')
+                sort_direction = 'DESC' if sort_order.upper() == 'DESC' else 'ASC'
+                
+                # For score sorting, handle nulls appropriately
+                if sort_by == 'score':
+                    if sort_order.upper() == 'DESC':
+                        order_clause = f"ORDER BY {sort_column} DESC NULLS LAST"
+                    else:
+                        order_clause = f"ORDER BY {sort_column} ASC NULLS LAST"
+                else:
+                    order_clause = f"ORDER BY {sort_column} {sort_direction}"
+                
+                # Build LIMIT/OFFSET clause
+                limit_clause = ""
+                if limit is not None:
+                    limit_clause = f"LIMIT {limit}"
+                    if offset is not None:
+                        limit_clause += f" OFFSET {offset}"
+                
+                query = text(f"""
                     SELECT 
                         s.symbol,
                         s.name as company_name,
@@ -41,8 +105,7 @@ class StockDataService:
                         p.pe_ratio,
                         u.undervaluation_score,
                         u.data_quality,
-                        CASE WHEN p.symbol IS NOT NULL THEN 1 ELSE 0 END as has_profile,
-                        CASE WHEN u.undervaluation_score IS NULL THEN 1 ELSE 0 END as score_null_order
+                        CASE WHEN p.symbol IS NOT NULL THEN 1 ELSE 0 END as has_profile
                     FROM sp500_constituents s
                     LEFT JOIN (
                         SELECT symbol, companyname, price, mktcap, 
@@ -50,12 +113,12 @@ class StockDataService:
                         FROM company_profiles
                     ) p ON s.symbol = p.symbol
                     LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
-                    ORDER BY 
-                        score_null_order,
-                        u.undervaluation_score DESC NULLS LAST,
-                        s.symbol
+                    {where_clause}
+                    {order_clause}
+                    {limit_clause}
                 """)
-                result = conn.execute(query)
+                
+                result = conn.execute(query, params)
                 stocks = result.fetchall()
             
             # Convert to list of dictionaries
@@ -79,6 +142,58 @@ class StockDataService:
         except Exception as e:
             logger.error(f"Error getting stocks with scores: {e}")
             return []
+    
+    def get_stocks_count(self, 
+                        sector: Optional[str] = None,
+                        min_score: Optional[float] = None,
+                        max_score: Optional[float] = None) -> int:
+        """
+        Get total count of stocks matching the filters
+        
+        Args:
+            sector: Filter by sector (optional)
+            min_score: Minimum undervaluation score (optional)
+            max_score: Maximum undervaluation score (optional)
+            
+        Returns:
+            Total count of stocks matching filters
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                # Build dynamic WHERE clause
+                where_conditions = []
+                params = {}
+                
+                if sector:
+                    where_conditions.append("s.sector = :sector")
+                    params['sector'] = sector
+                
+                if min_score is not None:
+                    where_conditions.append("u.undervaluation_score >= :min_score")
+                    params['min_score'] = min_score
+                
+                if max_score is not None:
+                    where_conditions.append("u.undervaluation_score <= :max_score")
+                    params['max_score'] = max_score
+                
+                where_clause = ""
+                if where_conditions:
+                    where_clause = "WHERE " + " AND ".join(where_conditions)
+                
+                query = text(f"""
+                    SELECT COUNT(*) as total_count
+                    FROM sp500_constituents s
+                    LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
+                    {where_clause}
+                """)
+                
+                result = conn.execute(query, params)
+                count = result.fetchone()
+                return count.total_count if count else 0
+            
+        except Exception as e:
+            logger.error(f"Error getting stocks count: {e}")
+            return 0
     
     def get_stock_summary_stats(self, stocks_list: List[Dict]) -> Dict:
         """
@@ -782,4 +897,158 @@ class StockDataService:
                 
         except Exception as e:
             logger.error(f"Error getting data availability status for {symbol}: {e}")
+            return {}
+    
+    def get_comprehensive_stock_data(self, symbol: str) -> Dict:
+        """
+        Get comprehensive stock data in a single optimized query
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            Dictionary containing all stock data needed for detail page
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                # Main comprehensive query
+                main_query = text("""
+                    SELECT 
+                        -- Basic info
+                        s.symbol, s.name, s.sector, s.sub_sector, s.headquarters_location,
+                        
+                        -- Company profile
+                        p.price, p.mktcap, p.beta, p.volavg, p.lastdiv, p.range, p.changes,
+                        p.companyname, p.currency, p.exchange, p.industry, p.website, 
+                        p.description, p.ceo, p.country, p.fulltimeemployees, p.phone,
+                        p.address, p.city, p.state, p.zip, p.dcf, p.image, p.ipodate,
+                        CASE WHEN p.volavg > 0 THEN p.mktcap / p.volavg ELSE NULL END as pe_ratio,
+                        
+                        -- Undervaluation scores
+                        u.undervaluation_score, u.valuation_score, u.quality_score,
+                        u.strength_score, u.risk_score, u.data_quality,
+                        
+                        -- Profile and score timestamps
+                        p.updated_at as profile_updated_at,
+                        u.updated_at as score_updated_at
+                        
+                    FROM sp500_constituents s
+                    LEFT JOIN company_profiles p ON s.symbol = p.symbol
+                    LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
+                    WHERE s.symbol = :symbol
+                """)
+                
+                result = conn.execute(main_query, {"symbol": symbol})
+                main_data = result.fetchone()
+                
+                if not main_data:
+                    return {}
+                
+                # Convert main data to dict
+                stock_data = {
+                    'basic_info': {
+                        'symbol': main_data.symbol,
+                        'name': main_data.name,
+                        'sector': main_data.sector,
+                        'sub_sector': main_data.sub_sector,
+                        'headquarters': main_data.headquarters_location
+                    }
+                }
+                
+                # Add profile data if available
+                if main_data.price is not None:
+                    stock_data['profile'] = {
+                        'symbol': main_data.symbol,
+                        'price': main_data.price,
+                        'mktcap': main_data.mktcap,
+                        'beta': main_data.beta,
+                        'volavg': main_data.volavg,
+                        'lastdiv': main_data.lastdiv,
+                        'range': main_data.range,
+                        'changes': main_data.changes,
+                        'companyname': main_data.companyname,
+                        'currency': main_data.currency,
+                        'exchange': main_data.exchange,
+                        'industry': main_data.industry,
+                        'website': main_data.website,
+                        'description': main_data.description,
+                        'ceo': main_data.ceo,
+                        'country': main_data.country,
+                        'fulltimeemployees': main_data.fulltimeemployees,
+                        'phone': main_data.phone,
+                        'address': main_data.address,
+                        'city': main_data.city,
+                        'state': main_data.state,
+                        'zip': main_data.zip,
+                        'dcf': main_data.dcf,
+                        'image': main_data.image,
+                        'ipodate': main_data.ipodate,
+                        'pe_ratio': main_data.pe_ratio,
+                        'updated_at': main_data.profile_updated_at.isoformat() if main_data.profile_updated_at else None
+                    }
+                
+                # Add undervaluation scores if available
+                if main_data.undervaluation_score is not None:
+                    stock_data['undervaluation'] = {
+                        'symbol': main_data.symbol,
+                        'undervaluation_score': main_data.undervaluation_score,
+                        'valuation_score': main_data.valuation_score,
+                        'quality_score': main_data.quality_score,
+                        'strength_score': main_data.strength_score,
+                        'risk_score': main_data.risk_score,
+                        'data_quality': main_data.data_quality,
+                        'updated_at': main_data.score_updated_at.isoformat() if main_data.score_updated_at else None
+                    }
+                
+                # Get recent price history (last 252 trading days)
+                price_query = text("""
+                    SELECT date, open, high, low, close, adjclose, volume
+                    FROM historical_prices
+                    WHERE symbol = :symbol
+                    ORDER BY date DESC
+                    LIMIT 252
+                """)
+                
+                price_result = conn.execute(price_query, {"symbol": symbol})
+                price_history = price_result.fetchall()
+                
+                if price_history:
+                    stock_data['price_history'] = []
+                    for price in price_history:
+                        stock_data['price_history'].append({
+                            'date': price.date.isoformat(),
+                            'open': price.open,
+                            'high': price.high,
+                            'low': price.low,
+                            'close': price.close,
+                            'adjclose': price.adjclose,
+                            'volume': price.volume
+                        })
+                
+                # Get data availability status (gaps marked as unavailable)
+                gap_query = text("""
+                    SELECT gap_type, status, next_retry 
+                    FROM data_gaps 
+                    WHERE symbol = :symbol 
+                    AND status = 'data_unavailable'
+                """)
+                
+                gap_result = conn.execute(gap_query, {"symbol": symbol})
+                unavailable_gaps = gap_result.fetchall()
+                
+                if unavailable_gaps:
+                    stock_data['data_availability'] = {}
+                    for gap in unavailable_gaps:
+                        gap_type = gap.gap_type
+                        retry_time = gap.next_retry
+                        stock_data['data_availability'][gap_type] = {
+                            'status': 'data_unavailable',
+                            'next_retry': retry_time.isoformat() if retry_time else None,
+                            'message': 'Data Unavailable'
+                        }
+                
+                return stock_data
+                
+        except Exception as e:
+            logger.error(f"Error getting comprehensive stock data for {symbol}: {e}")
             return {}

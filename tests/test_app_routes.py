@@ -17,7 +17,8 @@ def mock_env_vars():
         yield
 
 # Import app and other modules after env vars are mocked
-from app import app, get_stock_service, get_fmp_client, get_undervaluation_analyzer, get_auth_manager, get_portfolio_manager
+from app import app
+from services import get_stock_service, get_fmp_client, get_undervaluation_analyzer, get_auth_manager, get_portfolio_manager
 from data_access_layer import StockDataService
 from fmp_client import FMPClient
 from undervaluation_analyzer import UndervaluationAnalyzer
@@ -31,13 +32,6 @@ def client():
     with app.test_client() as client:
         with app.app_context():
             # Ensure services are re-initialized for each test with mocks
-            # This is crucial because services are global in app.py
-            global stock_service, fmp_client, undervaluation_analyzer, auth_manager, portfolio_manager
-            stock_service = None
-            fmp_client = None
-            undervaluation_analyzer = None
-            auth_manager = None
-            portfolio_manager = None
 
             # Mock the underlying dependencies for services
             mock_db_manager = MagicMock()
@@ -54,12 +48,12 @@ def client():
             mock_portfolio_manager_instance = MagicMock(spec=PortfolioManager)
 
             with patch.multiple(
-                'app',
-                StockDataService=mock_stock_service_instance,
-                FMPClient=mock_fmp_client_instance,
-                UndervaluationAnalyzer=mock_undervaluation_analyzer_instance,
-                AuthenticationManager=mock_auth_manager_instance,
-                PortfolioManager=mock_portfolio_manager_instance
+                'services',
+                get_stock_service=MagicMock(return_value=mock_stock_service_instance),
+                get_fmp_client=MagicMock(return_value=mock_fmp_client_instance),
+                get_undervaluation_analyzer=MagicMock(return_value=mock_undervaluation_analyzer_instance),
+                get_auth_manager=MagicMock(return_value=mock_auth_manager_instance),
+                get_portfolio_manager=MagicMock(return_value=mock_portfolio_manager_instance)
             ):
                 # Call the getters to ensure the global instances in app.py are set
                 get_stock_service()
@@ -73,17 +67,7 @@ def client():
                 with patch('data_access_layer.DatabaseManager', return_value=mock_db_manager):
                     pass # This patch is needed for data_access_layer.py to use the mocked db_manager
 
-                with patch('auth.sqlite3.connect', return_value=MagicMock()): # Mock sqlite3.connect in auth.py
-                    # Manually create auth tables for the in-memory DB used by auth_manager
-                    conn = sqlite3.connect(":memory:")
-                    cursor = conn.cursor()
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, is_active BOOLEAN DEFAULT 1, last_login TIMESTAMP, failed_login_attempts INTEGER DEFAULT 0, locked_until TIMESTAMP)''')
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS user_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, session_token TEXT UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, expires_at TIMESTAMP NOT NULL, ip_address TEXT, user_agent TEXT, is_active BOOLEAN DEFAULT 1, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS user_watchlists (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, notes TEXT, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE, UNIQUE(user_id, symbol))''')
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS user_portfolios (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, shares REAL NOT NULL, purchase_price REAL NOT NULL, purchase_date DATE NOT NULL, purchase_notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS portfolio_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, transaction_type TEXT NOT NULL CHECK (transaction_type IN ('BUY', 'SELL')), shares REAL NOT NULL, price_per_share REAL NOT NULL, transaction_date DATE NOT NULL, fees REAL DEFAULT 0, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE)''')
-                    conn.commit()
-                    conn.close()
+                pass
 
         yield client
 

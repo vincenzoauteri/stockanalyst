@@ -41,7 +41,7 @@ api_v2 = Blueprint('api_v2', __name__, url_prefix='/api/v2')
 # Stock Data Endpoints
 @api_v2.route('/stocks', methods=['GET'])
 def api_get_stocks():
-    """Get list of all S&P 500 stocks with filtering and sorting"""
+    """Get list of all S&P 500 stocks with filtering, sorting, and pagination"""
     try:
         service = get_stock_service()
         
@@ -52,37 +52,39 @@ def api_get_stocks():
             max_score = request.args.get('max_score', type=float)
             sort_field = request.args.get('sort', 'symbol')
             sort_order = request.args.get('order', 'asc')
-            limit = request.args.get('limit', type=int)
+            page = request.args.get('page', 1, type=int)
+            per_page = request.args.get('per_page', 50, type=int)
+            
+            # Validate pagination parameters
+            if page < 1:
+                page = 1
+            if per_page < 1 or per_page > 500:  # Limit max per_page to prevent abuse
+                per_page = 50
+                
+            # Calculate offset for pagination
+            offset = (page - 1) * per_page
+            
         except ValueError as e:
             logger.warning(f"Invalid query parameters in api_get_stocks: {e}")
             return jsonify({'success': False, 'error': 'Invalid query parameters'}), 400
         
-        # Get all stocks with scores
-        stocks_list = service.get_all_stocks_with_scores()
+        # Get total count for pagination
+        total_count = service.get_stocks_count(
+            sector=sector,
+            min_score=min_score,
+            max_score=max_score
+        )
         
-        # Apply filters
-        if sector:
-            stocks_list = [s for s in stocks_list if s.get('sector', '').lower() == sector.lower()]
-        
-        if min_score is not None:
-            stocks_list = [s for s in stocks_list if s.get('undervaluation_score', 0) >= min_score]
-        
-        if max_score is not None:
-            stocks_list = [s for s in stocks_list if s.get('undervaluation_score', 0) <= max_score]
-        
-        # Apply sorting
-        reverse_sort = sort_order.lower() == 'desc'
-        if sort_field in ['symbol', 'price', 'market_cap', 'undervaluation_score']:
-            try:
-                stocks_list.sort(key=lambda x: x.get(sort_field, 0), reverse=reverse_sort)
-            except TypeError as e:
-                logger.warning(f"Sort field incompatible types in api_get_stocks: {e}")
-                # Fall back to string comparison
-                stocks_list.sort(key=lambda x: str(x.get(sort_field, '')), reverse=reverse_sort)
-        
-        # Apply limit
-        if limit and limit > 0:
-            stocks_list = stocks_list[:limit]
+        # Get paginated stocks with database-level filtering and sorting
+        stocks_list = service.get_all_stocks_with_scores(
+            sector=sector,
+            min_score=min_score,
+            max_score=max_score,
+            sort_by=sort_field,
+            sort_order=sort_order,
+            limit=per_page,
+            offset=offset
+        )
         
         # Clean up response data
         response_data = []
@@ -93,24 +95,35 @@ def api_get_stocks():
                     'name': stock.get('name') or stock.get('company_name'),
                     'sector': stock.get('sector'),
                     'price': stock.get('price'),
-                    'market_cap': stock.get('mktcap'),
+                    'market_cap': stock.get('market_cap'),
                     'undervaluation_score': stock.get('undervaluation_score')
                 })
             except (AttributeError, KeyError) as e:
                 logger.warning(f"Skipping malformed stock data: {e}")
                 continue
         
+        # Calculate pagination metadata
+        total_pages = (total_count + per_page - 1) // per_page
+        has_next = page < total_pages
+        has_prev = page > 1
+        
         return jsonify({
             'success': True,
             'data': response_data,
-            'total': len(response_data),
+            'pagination': {
+                'total_count': total_count,
+                'total_pages': total_pages,
+                'current_page': page,
+                'per_page': per_page,
+                'has_next': has_next,
+                'has_prev': has_prev
+            },
             'filters': {
                 'sector': sector,
                 'min_score': min_score,
                 'max_score': max_score,
                 'sort': sort_field,
-                'order': sort_order,
-                'limit': limit
+                'order': sort_order
             }
         })
         

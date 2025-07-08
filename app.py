@@ -27,6 +27,7 @@ from services import (
     get_auth_manager,
     get_portfolio_manager
 )
+from unified_config import get_config
 
 # Configure centralized logging
 setup_logging(log_level="INFO", enable_file_logging=True, enable_console_logging=True)
@@ -46,6 +47,12 @@ if env in ['production', 'prod']:
     if app.config['SECRET_KEY'] in default_secret_keys:
         logger.warning("SECURITY WARNING: Default SECRET_KEY detected in production environment. "
                       "Please set a secure SECRET_KEY environment variable.")
+
+# Make config available in templates
+@app.context_processor
+def inject_config():
+    """Inject configuration into template context"""
+    return {'config': get_config()}
 
 # Register API blueprint
 app.register_blueprint(api_v2)
@@ -72,17 +79,81 @@ def to_json_filter(obj):
 
 @app.route('/')
 def index():
-    """Main page showing list of S&P 500 stocks"""
+    """Main page showing list of S&P 500 stocks with pagination"""
     try:
         service = get_stock_service()
 
-        # Get all stocks with their scores and profiles
-        stocks_list = service.get_all_stocks_with_scores()
+        # Get query parameters for pagination and filtering
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        sector = request.args.get('sector')
+        min_score = request.args.get('min_score', type=float)
+        max_score = request.args.get('max_score', type=float)
+        sort_by = request.args.get('sort', 'symbol')
+        sort_order = request.args.get('order', 'asc')
+        
+        # Validate parameters
+        if page < 1:
+            page = 1
+        if per_page < 1 or per_page > 100:  # Limit max per_page for frontend
+            per_page = 50
+        
+        # Calculate offset
+        offset = (page - 1) * per_page
+        
+        # Get total count
+        total_count = service.get_stocks_count(
+            sector=sector,
+            min_score=min_score,
+            max_score=max_score
+        )
+        
+        # Get paginated stocks
+        stocks_list = service.get_all_stocks_with_scores(
+            sector=sector,
+            min_score=min_score,
+            max_score=max_score,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=per_page,
+            offset=offset
+        )
 
-        # Get summary statistics
-        stats = service.get_stock_summary_stats(stocks_list)
+        # Get summary statistics (for all stocks, not just current page)
+        all_stocks_sample = service.get_all_stocks_with_scores(limit=500)  # Get sample for stats
+        stats = service.get_stock_summary_stats(all_stocks_sample)
 
-        return render_template('index.html', stocks=stocks_list, stats=stats)
+        # Calculate pagination metadata
+        total_pages = (total_count + per_page - 1) // per_page
+        has_next = page < total_pages
+        has_prev = page > 1
+        
+        pagination = {
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page,
+            'per_page': per_page,
+            'has_next': has_next,
+            'has_prev': has_prev
+        }
+        
+        # Get available sectors for filter dropdown
+        sectors = list(stats.get('sectors', []))
+        
+        filters = {
+            'sector': sector,
+            'min_score': min_score,
+            'max_score': max_score,
+            'sort': sort_by,
+            'order': sort_order
+        }
+
+        return render_template('index.html', 
+                             stocks=stocks_list, 
+                             stats=stats,
+                             pagination=pagination,
+                             filters=filters,
+                             sectors=sectors)
     except AttributeError as e:
         logger.error(f"Service method not available in index route: {e}")
         return render_template('error.html', error='Service temporarily unavailable'), 503
@@ -104,45 +175,14 @@ def stock_detail(symbol):
         service = get_stock_service()
         client = get_fmp_client()
         
-        stock_data = {}
-        logger.info(f"Initialized stock_data for {symbol}")
+        # Get comprehensive stock data in optimized queries
+        logger.info(f"Getting comprehensive stock data for {symbol}")
+        stock_data = service.get_comprehensive_stock_data(symbol)
         
-        # Get basic stock info
-        logger.info(f"Getting basic info for {symbol}")
-        basic_info = service.get_stock_basic_info(symbol)
-        if not basic_info:
+        if not stock_data:
             return render_template('error.html', error=f"Stock {symbol} not found")
         
-        stock_data['basic_info'] = basic_info
-        logger.info(f"Basic info retrieved for {symbol}")
-        
-        # Get company profile
-        logger.info(f"Getting company profile for {symbol}")
-        profile = service.get_stock_company_profile(symbol)
-        if profile:
-            stock_data['profile'] = profile
-            logger.info(f"Company profile retrieved for {symbol}")
-        
-        # Get undervaluation score
-        logger.info(f"Getting undervaluation score for {symbol}")
-        undervaluation_score = service.get_stock_undervaluation_score(symbol)
-        if undervaluation_score:
-            stock_data['undervaluation'] = undervaluation_score
-            logger.info(f"Undervaluation score retrieved for {symbol}")
-        
-        # Get historical price data (last 252 trading days)
-        logger.info(f"Getting price history for {symbol}")
-        price_history = service.get_stock_historical_prices(symbol, limit=252)
-        if price_history:
-            stock_data['price_history'] = price_history
-            logger.info(f"Price history retrieved for {symbol}: {len(price_history)} records")
-        
-        # Get data availability status for gaps marked as unavailable
-        logger.info(f"Getting data availability status for {symbol}")
-        data_availability = service.get_data_availability_status(symbol)
-        if data_availability:
-            stock_data['data_availability'] = data_availability
-            logger.info(f"Data availability status retrieved for {symbol}: {list(data_availability.keys())}")
+        logger.info(f"Comprehensive stock data retrieved for {symbol}")
         
         # Get fundamentals from API if available
         if client.api_key:
