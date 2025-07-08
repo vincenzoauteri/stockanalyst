@@ -136,6 +136,10 @@ class DatabaseManager:
                     data_quality TEXT,
                     price REAL,
                     mktcap INTEGER,
+                    dcf_value REAL,
+                    ddm_value REAL,
+                    relative_value REAL,
+                    final_intrinsic_value REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -356,10 +360,26 @@ class DatabaseManager:
     
     @log_function_call
     def insert_sp500_constituents(self, df: pd.DataFrame):
-        """Insert S&P 500 constituents data"""
+        """Insert S&P 500 constituents data, skip if table already has sufficient data"""
         logger.info(f"Inserting {len(df)} S&P 500 constituents")
         try:
-            df.to_sql('sp500_constituents', self.engine, if_exists='replace', index=False)
+            with self.engine.connect() as conn:
+                # Check if table already has data
+                result = conn.execute(text("SELECT COUNT(*) FROM sp500_constituents"))
+                existing_count = result.fetchone()[0]
+                
+                if existing_count >= 500:
+                    logger.info(f"SP500 table already has {existing_count} records, skipping bulk insert")
+                    return
+                
+                # Clear any test data first
+                if existing_count > 0 and existing_count < 10:
+                    logger.info(f"Clearing {existing_count} test records before inserting real data")
+                    conn.execute(text("DELETE FROM sp500_constituents"))
+                    conn.commit()
+            
+            # Use pandas to_sql for bulk insert
+            df.to_sql('sp500_constituents', self.engine, if_exists='append', index=False)
             logger.info("S&P 500 constituents inserted successfully")
         except Exception as e:
             logger.error(f"Error inserting S&P 500 constituents: {e}")
@@ -407,6 +427,23 @@ class DatabaseManager:
             logger.debug(f"Company profile for {symbol} inserted/updated successfully")
         except Exception as e:
             logger.error(f"Error inserting company profile for {symbol}: {e}")
+            raise
+    
+    @log_function_call
+    def update_beta(self, symbol: str, beta: float):
+        """Update the beta value for a specific symbol in the company_profiles table."""
+        logger.debug(f"Updating beta for {symbol} to {beta:.4f}")
+        try:
+            with self.engine.connect() as conn:
+                conn.execute(text("""
+                    UPDATE company_profiles
+                    SET beta = :beta, updated_at = CURRENT_TIMESTAMP
+                    WHERE symbol = :symbol
+                """), {'symbol': symbol, 'beta': beta})
+                conn.commit()
+            logger.info(f"Successfully updated beta for {symbol}")
+        except Exception as e:
+            logger.error(f"Error updating beta for {symbol}: {e}")
             raise
     
     @log_function_call

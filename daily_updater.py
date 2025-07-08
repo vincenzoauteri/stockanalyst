@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict
 from data_fetcher import DataFetcher
+from data_access_layer import StockDataService
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,7 @@ class DailyUpdater:
     def __init__(self):
         self.data_fetcher = DataFetcher(daily_request_limit=250, rate_limit_delay=0.25)
         self.db_manager = self.data_fetcher.db_manager
+        self.stock_data_service = StockDataService()
         
         # Data update priorities (most important first)
         self.update_priorities = [
@@ -147,6 +149,10 @@ class DailyUpdater:
             total_requests_used += requests_used
             logger.info(f"Quarterly updates used {requests_used} requests")
             
+            # 5. Update Betas (local calculation, no API cost)
+            logger.info("Step 5: Updating beta values for all stocks")
+            self.update_all_betas()
+            
             # Summary
             end_time = datetime.now()
             duration = end_time - start_time
@@ -163,7 +169,26 @@ class DailyUpdater:
         except Exception as e:
             logger.error(f"Daily update failed: {e}")
             return False
-    
+
+    def update_all_betas(self):
+        """Calculate and update beta for all S&P 500 stocks."""
+        logger.info("Starting beta calculation for all S&P 500 stocks.")
+        symbols = self.db_manager.get_sp500_symbols()
+        updated_count = 0
+        failed_count = 0
+        for symbol in symbols:
+            try:
+                beta = self.stock_data_service.calculate_beta(symbol)
+                if beta is not None:
+                    self.db_manager.update_beta(symbol, beta)
+                    updated_count += 1
+                else:
+                    failed_count += 1
+            except Exception as e:
+                logger.error(f"Failed to calculate or update beta for {symbol}: {e}")
+                failed_count += 1
+        logger.info(f"Beta update complete. Updated: {updated_count}, Failed: {failed_count}")
+
     def get_update_status(self) -> Dict:
         """Get current update status and statistics"""
         try:

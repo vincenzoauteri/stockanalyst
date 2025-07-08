@@ -8,6 +8,8 @@ from typing import Dict, List, Optional
 from database import DatabaseManager
 from sqlalchemy import text
 from logging_config import get_logger
+import pandas as pd
+from unified_config import get_config
 
 logger = get_logger(__name__)
 
@@ -99,6 +101,188 @@ class YFinanceUndervaluationCalculator:
         except Exception as e:
             logger.error(f"Error getting financial data for {symbol}: {e}")
             return {}
+
+    def get_historical_growth_rates(self, symbol: str, years: int = 3) -> Dict:
+        """Get historical growth rates for revenue and net income."""
+        try:
+            with self.db.engine.connect() as conn:
+                # Get the last `years + 1` years of annual data
+                income_data = conn.execute(text(f"""
+                    SELECT period_ending, total_revenue, net_income
+                    FROM income_statements
+                    WHERE symbol = :symbol AND period_type = 'annual'
+                    ORDER BY period_ending DESC
+                    LIMIT {years + 1}
+                """), {'symbol': symbol}).fetchall()
+
+                if len(income_data) < 2:
+                    return {}
+
+                df = pd.DataFrame(income_data)
+                df = df.sort_values('period_ending').reset_index(drop=True)
+
+                growth_rates = {}
+
+                # Calculate Revenue Growth (CAGR)
+                start_revenue = df['total_revenue'].iloc[0]
+                end_revenue = df['total_revenue'].iloc[-1]
+                num_periods = len(df) - 1
+
+                if start_revenue and start_revenue > 0 and end_revenue:
+                    cagr_revenue = (end_revenue / start_revenue) ** (1 / num_periods) - 1
+                    growth_rates['revenue_growth_3y'] = cagr_revenue
+
+                # Calculate Earnings Growth (CAGR)
+                start_income = df['net_income'].iloc[0]
+                end_income = df['net_income'].iloc[-1]
+
+                if start_income and start_income > 0 and end_income and end_income > 0:
+                    cagr_income = (end_income / start_income) ** (1 / num_periods) - 1
+                    growth_rates['earnings_growth_3y'] = cagr_income
+                
+                return growth_rates
+
+        except Exception as e:
+            logger.error(f"Error calculating growth rates for {symbol}: {e}")
+            return {}
+
+    def calculate_ddm_value(self, symbol: str, beta: float, risk_free_rate: float, equity_risk_premium: float) -> Optional[float]:
+        """Calculate intrinsic value using the Dividend Discount Model (DDM)."""
+        try:
+            with self.db.engine.connect() as conn:
+                # Get the most recent dividend payment
+                dividend_data = conn.execute(text("""
+                    SELECT action_date, amount
+                    FROM corporate_actions
+                    WHERE symbol = :symbol AND action_type = 'dividend' AND amount > 0
+                    ORDER BY action_date DESC
+                    LIMIT 1
+                """), {'symbol': symbol}).fetchone()
+
+                if not dividend_data:
+                    return None
+
+                d0 = float(dividend_data.amount)
+
+                # Get historical dividends to calculate growth rate
+                historical_dividends = conn.execute(text("""
+                    SELECT action_date, amount
+                    FROM corporate_actions
+                    WHERE symbol = :symbol AND action_type = 'dividend' AND amount > 0
+                    ORDER BY action_date DESC
+                    LIMIT 5
+                """), {'symbol': symbol}).fetchall()
+
+                if len(historical_dividends) < 2:
+                    g = 0.025 # Assume a conservative 2.5% growth rate
+                else:
+                    # Simple growth rate calculation
+                    df = pd.DataFrame(historical_dividends)
+                    df = df.sort_values('action_date').reset_index(drop=True)
+                    df['growth'] = df['amount'].pct_change()
+                    g = df['growth'].mean()
+                    if pd.isna(g) or g <= 0:
+                        g = 0.025 # Fallback to conservative growth rate
+
+                # Calculate cost of equity (r)
+                r = risk_free_rate + beta * equity_risk_premium
+
+                if r <= g:
+                    return None # Avoid negative or zero denominator
+
+                # Calculate D1
+                d1 = d0 * (1 + g)
+
+                # Calculate DDM value
+                intrinsic_value = d1 / (r - g)
+                return intrinsic_value
+
+        except Exception as e:
+            logger.error(f"Error calculating DDM for {symbol}: {e}")
+            return None
+
+    def calculate_dcf_value(self, symbol: str, risk_free_rate: float, equity_risk_premium: float) -> Optional[float]:
+        """Calculate intrinsic value using a Discounted Cash Flow (DCF) model."""
+        try:
+            with self.db.engine.connect() as conn:
+                # 1. Get Data
+                profile = conn.execute(text("SELECT beta, mktcap FROM company_profiles WHERE symbol = :symbol"), {'symbol': symbol}).fetchone()
+                if not profile or not profile.beta:
+                    return None
+
+                beta = float(profile.beta)
+                market_cap = float(profile.mktcap)
+
+                balance_sheet = conn.execute(text("SELECT total_debt, total_equity FROM balance_sheets WHERE symbol = :symbol ORDER BY period_ending DESC LIMIT 1"), {'symbol': symbol}).fetchone()
+                if not balance_sheet:
+                    return None
+                
+                total_debt = float(balance_sheet.total_debt)
+                total_equity = float(balance_sheet.total_equity)
+
+                income_statement = conn.execute(text("SELECT interest_expense, tax_provision, net_income FROM income_statements WHERE symbol = :symbol ORDER BY period_ending DESC LIMIT 1"), {'symbol': symbol}).fetchone()
+                if not income_statement:
+                    return None
+
+                interest_expense = float(income_statement.interest_expense) if income_statement.interest_expense else 0
+                tax_provision = float(income_statement.tax_provision) if income_statement.tax_provision else 0
+                net_income = float(income_statement.net_income) if income_statement.net_income else 0
+                
+                # 2. Calculate WACC
+                cost_of_equity = risk_free_rate + beta * equity_risk_premium
+                cost_of_debt = interest_expense / total_debt if total_debt > 0 else 0.05 # Estimate if not available
+                tax_rate = tax_provision / (net_income + tax_provision) if (net_income + tax_provision) > 0 else 0.21 # Estimate if not available
+                
+                wacc = self._calculate_wacc(market_cap, total_debt, cost_of_equity, cost_of_debt, tax_rate)
+                if not wacc:
+                    return None
+
+                # 3. Project FCFF
+                # For simplicity, we'll use historical FCF growth. A more advanced model would project drivers.
+                historical_fcf = conn.execute(text("SELECT free_cash_flow FROM cash_flow_statements WHERE symbol = :symbol AND period_type = 'annual' ORDER BY period_ending DESC LIMIT 5"), {'symbol': symbol}).fetchall()
+                if len(historical_fcf) < 2:
+                    return None
+
+                fcf_df = pd.DataFrame(historical_fcf)
+                fcf_df['growth'] = fcf_df['free_cash_flow'].pct_change()
+                fcf_growth_rate = fcf_df['growth'].mean()
+                if pd.isna(fcf_growth_rate) or fcf_growth_rate <= 0:
+                    fcf_growth_rate = 0.03 # Conservative growth
+
+                last_fcf = float(historical_fcf[0].free_cash_flow)
+                projected_fcf = [last_fcf * (1 + fcf_growth_rate) ** i for i in range(1, 6)]
+
+                # 4. Calculate Terminal Value
+                perpetual_growth_rate = 0.025
+                terminal_value = (projected_fcf[-1] * (1 + perpetual_growth_rate)) / (wacc - perpetual_growth_rate)
+
+                # 5. Discount Cash Flows
+                dcf_values = [fcf / (1 + wacc) ** (i + 1) for i, fcf in enumerate(projected_fcf)]
+                present_terminal_value = terminal_value / (1 + wacc) ** 5
+                
+                enterprise_value = sum(dcf_values) + present_terminal_value
+
+                # 6. Calculate Equity Value
+                equity_value = enterprise_value - total_debt
+                
+                shares_outstanding = conn.execute(text("SELECT shares_outstanding FROM income_statements WHERE symbol = :symbol ORDER BY period_ending DESC LIMIT 1"), {'symbol': symbol}).fetchone()
+                if not shares_outstanding or not shares_outstanding.shares_outstanding:
+                    return None
+
+                intrinsic_value_per_share = equity_value / float(shares_outstanding.shares_outstanding)
+                return intrinsic_value_per_share
+
+        except Exception as e:
+            logger.error(f"Error calculating DCF for {symbol}: {e}")
+            return None
+
+    def _calculate_wacc(self, market_cap, total_debt, cost_of_equity, cost_of_debt, tax_rate):
+        """Helper function to calculate WACC."""
+        v = market_cap + total_debt
+        if v == 0: return None
+        
+        wacc = (market_cap / v) * cost_of_equity + (total_debt / v) * cost_of_debt * (1 - tax_rate)
+        return wacc
     
     def calculate_financial_ratios(self, data: Dict) -> Dict:
         """Calculate key financial ratios from the available data"""
@@ -141,6 +325,10 @@ class YFinanceUndervaluationCalculator:
             # Free Cash Flow Yield
             if data.get('free_cash_flow') and data.get('market_cap') and data.get('market_cap') > 0:
                 ratios['fcf_yield'] = data['free_cash_flow'] / data['market_cap']
+
+            # PEG Ratio
+            if ratios.get('pe_ratio') and data.get('earnings_growth_3y') and data.get('earnings_growth_3y') > 0:
+                ratios['peg_ratio'] = ratios['pe_ratio'] / (data['earnings_growth_3y'] * 100)
             
         except Exception as e:
             logger.error(f"Error calculating ratios for {data.get('symbol', 'unknown')}: {e}")
@@ -197,7 +385,7 @@ class YFinanceUndervaluationCalculator:
             'company_count': 0
         }
     
-    def calculate_undervaluation_score(self, symbol: str) -> Optional[Dict]:
+    def calculate_relative_score(self, symbol: str) -> Optional[Dict]:
         """Calculate undervaluation score for a single symbol"""
         try:
             # Get financial data
@@ -205,6 +393,10 @@ class YFinanceUndervaluationCalculator:
             if not data or not data.get('price') or not data.get('market_cap'):
                 logger.warning(f"Insufficient data for {symbol}")
                 return None
+
+            # Get growth rates
+            growth_rates = self.get_historical_growth_rates(symbol)
+            data.update(growth_rates)
             
             # Calculate ratios
             ratios = self.calculate_financial_ratios(data)
@@ -213,31 +405,40 @@ class YFinanceUndervaluationCalculator:
                 return None
             
             # Get sector averages (for future use)
-            # sector_avg = self.get_sector_averages(data.get('sector', 'Unknown'))
+            sector_avg = self.get_sector_averages(data.get('sector', 'Unknown'))
             
             # Calculate individual scores (0-100 scale)
             scores = {}
             
-            # Value Score (lower ratios = higher score)
+            # Value Score (lower ratios = higher score, compared to sector average)
             if 'pe_ratio' in ratios and ratios['pe_ratio'] > 0:
-                pe_score = max(0, min(100, 100 * (1 - (ratios['pe_ratio'] - 5) / 45)))  # 5-50 PE range
+                pe_score = max(0, min(100, 100 * (sector_avg['avg_pe'] / ratios['pe_ratio'])))
                 scores['pe_score'] = pe_score
             
             if 'pb_ratio' in ratios and ratios['pb_ratio'] > 0:
-                pb_score = max(0, min(100, 100 * (1 - (ratios['pb_ratio'] - 0.5) / 9.5)))  # 0.5-10 PB range
+                pb_score = max(0, min(100, 100 * (sector_avg['avg_pb'] / ratios['pb_ratio'])))
                 scores['pb_score'] = pb_score
             
             if 'ps_ratio' in ratios and ratios['ps_ratio'] > 0:
-                ps_score = max(0, min(100, 100 * (1 - (ratios['ps_ratio'] - 0.5) / 19.5)))  # 0.5-20 PS range
+                ps_score = max(0, min(100, 100 * (sector_avg['avg_ps'] / ratios['ps_ratio'])))
                 scores['ps_score'] = ps_score
+
+            if 'peg_ratio' in ratios and ratios['peg_ratio'] > 0:
+                # PEG ratio score, ideal is 1.0
+                peg = ratios['peg_ratio']
+                if peg <= 1.0:
+                    peg_score = 100
+                else:
+                    peg_score = max(0, 100 - (peg - 1.0) * 50)
+                scores['peg_score'] = peg_score
             
             # Quality Score (higher profitability = higher score)
             if 'roe' in ratios:
-                roe_score = max(0, min(100, ratios['roe'] * 500))  # 20% ROE = 100 score
+                roe_score = max(0, min(100, (ratios['roe'] / sector_avg['avg_roe']) * 100))
                 scores['roe_score'] = roe_score
             
             if 'roa' in ratios:
-                roa_score = max(0, min(100, ratios['roa'] * 1000))  # 10% ROA = 100 score
+                roa_score = max(0, min(100, (ratios['roa'] / sector_avg['avg_roa']) * 100))
                 scores['roa_score'] = roa_score
             
             # Financial Strength Score
@@ -265,7 +466,7 @@ class YFinanceUndervaluationCalculator:
                 scores['fcf_score'] = fcf_score
             
             # Calculate weighted final score
-            value_scores = [scores.get('pe_score'), scores.get('pb_score'), scores.get('ps_score')]
+            value_scores = [scores.get('pe_score'), scores.get('pb_score'), scores.get('ps_score'), scores.get('peg_score')]
             quality_scores = [scores.get('roe_score'), scores.get('roa_score')]
             strength_scores = [scores.get('current_ratio_score'), scores.get('debt_equity_score')]
             cash_scores = [scores.get('fcf_score')]
@@ -314,6 +515,70 @@ class YFinanceUndervaluationCalculator:
         except Exception as e:
             logger.error(f"Error calculating undervaluation score for {symbol}: {e}")
             return None
+
+    def get_valuation_scorecard(self, symbol: str) -> Optional[Dict]:
+        """
+        Calculate a comprehensive valuation scorecard for a symbol.
+        """
+        try:
+            # Get config for valuation parameters
+            config = get_config()
+            risk_free_rate = config.VALUATION_CONFIG['risk_free_rate']
+            equity_risk_premium = config.VALUATION_CONFIG['equity_risk_premium']
+
+            # 1. Calculate Relative Score
+            relative_score_data = self.calculate_relative_score(symbol)
+            if not relative_score_data:
+                return None
+
+            # 2. Calculate DDM Value
+            beta = relative_score_data.get('ratios', {}).get('beta') # Assuming beta is in ratios
+            if not beta:
+                with self.db.engine.connect() as conn:
+                    profile = conn.execute(text("SELECT beta FROM company_profiles WHERE symbol = :symbol"), {'symbol': symbol}).fetchone()
+                    if profile and profile.beta:
+                        beta = float(profile.beta)
+
+            ddm_value = None
+            if beta:
+                ddm_value = self.calculate_ddm_value(symbol, beta, risk_free_rate, equity_risk_premium)
+
+            # 3. Calculate DCF Value
+            dcf_value = self.calculate_dcf_value(symbol, risk_free_rate, equity_risk_premium)
+
+            # 4. Synthesize Results
+            final_intrinsic_value = None
+            weights = {'dcf': 0.5, 'ddm': 0.2, 'relative': 0.3}
+            values = []
+            if dcf_value:
+                values.append(dcf_value * weights['dcf'])
+            if ddm_value:
+                values.append(ddm_value * weights['ddm'])
+            
+            # For relative value, we need to estimate a value from the score.
+            # This is a simplification. A better approach would be to use peer multiples.
+            if relative_score_data.get('undervaluation_score'):
+                # This is a rough estimation and should be improved.
+                # For now, we assume the score reflects a % discount/premium to the current price.
+                relative_value = relative_score_data['price'] * (1 + (relative_score_data['undervaluation_score'] - 50) / 100)
+                values.append(relative_value * weights['relative'])
+
+            if values:
+                final_intrinsic_value = sum(values) / sum(weights[k] for k, v in {'dcf': dcf_value, 'ddm': ddm_value, 'relative': relative_value}.items() if v is not None)
+
+            # Combine all data
+            scorecard = {
+                **relative_score_data,
+                'dcf_value': dcf_value,
+                'ddm_value': ddm_value,
+                'final_intrinsic_value': final_intrinsic_value,
+            }
+            
+            return scorecard
+
+        except Exception as e:
+            logger.error(f"Error creating valuation scorecard for {symbol}: {e}")
+            return None
     
     def save_undervaluation_score(self, score_data: Dict):
         """Save undervaluation score to database"""
@@ -322,9 +587,11 @@ class YFinanceUndervaluationCalculator:
                 conn.execute(text("""
                     INSERT INTO undervaluation_scores 
                     (symbol, sector, undervaluation_score, valuation_score, quality_score, 
-                     strength_score, risk_score, data_quality, price, mktcap, updated_at)
+                     strength_score, risk_score, data_quality, price, mktcap, updated_at,
+                     dcf_value, ddm_value, final_intrinsic_value)
                     VALUES (:symbol, :sector, :undervaluation_score, :valuation_score, :quality_score, 
-                            :strength_score, :risk_score, :data_quality, :price, :mktcap, CURRENT_TIMESTAMP)
+                            :strength_score, :risk_score, :data_quality, :price, :mktcap, CURRENT_TIMESTAMP,
+                            :dcf_value, :ddm_value, :final_intrinsic_value)
                     ON CONFLICT (symbol) DO UPDATE SET
                     sector = EXCLUDED.sector,
                     undervaluation_score = EXCLUDED.undervaluation_score,
@@ -335,7 +602,10 @@ class YFinanceUndervaluationCalculator:
                     data_quality = EXCLUDED.data_quality,
                     price = EXCLUDED.price,
                     mktcap = EXCLUDED.mktcap,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = CURRENT_TIMESTAMP,
+                    dcf_value = EXCLUDED.dcf_value,
+                    ddm_value = EXCLUDED.ddm_value,
+                    final_intrinsic_value = EXCLUDED.final_intrinsic_value
                 """), {
                     'symbol': score_data['symbol'],
                     'sector': score_data['sector'],
@@ -346,7 +616,10 @@ class YFinanceUndervaluationCalculator:
                     'risk_score': score_data['risk_score'],
                     'data_quality': score_data['data_quality'],
                     'price': score_data['price'],
-                    'mktcap': score_data['market_cap']
+                    'market_cap': score_data['market_cap'],
+                    'dcf_value': score_data.get('dcf_value'),
+                    'ddm_value': score_data.get('ddm_value'),
+                    'final_intrinsic_value': score_data.get('final_intrinsic_value'),
                 })
                 conn.commit()
             
@@ -361,6 +634,9 @@ class YFinanceUndervaluationCalculator:
         logger.info("Starting Yahoo Finance-based undervaluation analysis with batch processing")
         
         try:
+            # Get config for valuation parameters
+            config = get_config()
+
             # Get all symbols and their data in a single query
             with self.db.engine.connect() as conn:
                 query = """
@@ -369,11 +645,14 @@ class YFinanceUndervaluationCalculator:
                         cp.price,
                         cp.mktcap,
                         cp.sector,
+                        cp.beta,
                         -- Income statement data (latest)
                         i.total_revenue,
                         i.net_income,
                         i.basic_eps,
                         i.shares_outstanding,
+                        i.interest_expense,
+                        i.tax_provision,
                         -- Balance sheet data (latest)
                         b.total_assets,
                         b.total_equity,
@@ -384,7 +663,7 @@ class YFinanceUndervaluationCalculator:
                         cf.free_cash_flow
                     FROM company_profiles cp
                     LEFT JOIN (
-                        SELECT DISTINCT ON (symbol) symbol, total_revenue, net_income, basic_eps, shares_outstanding
+                        SELECT DISTINCT ON (symbol) symbol, total_revenue, net_income, basic_eps, shares_outstanding, interest_expense, tax_provision
                         FROM income_statements
                         WHERE period_type = 'annual'
                         ORDER BY symbol, period_ending DESC
@@ -422,24 +701,9 @@ class YFinanceUndervaluationCalculator:
                 for row in batch:
                     try:
                         # Convert row to dict
-                        data = {
-                            'symbol': row.symbol,
-                            'price': row.price,
-                            'market_cap': row.mktcap,
-                            'sector': row.sector,
-                            'total_revenue': row.total_revenue,
-                            'net_income': row.net_income,
-                            'basic_eps': row.basic_eps,
-                            'shares_outstanding': row.shares_outstanding,
-                            'total_assets': row.total_assets,
-                            'total_equity': row.total_equity,
-                            'total_debt': row.total_debt,
-                            'cash_and_equivalents': row.cash_and_equivalents,
-                            'operating_cash_flow': row.operating_cash_flow,
-                            'free_cash_flow': row.free_cash_flow
-                        }
+                        data = dict(row._mapping)
                         
-                        score_data = self.calculate_score_from_data(data)
+                        score_data = self.calculate_scorecard_from_data(data, config)
                         if score_data:
                             batch_scores.append(score_data)
                             successful += 1
@@ -470,77 +734,82 @@ class YFinanceUndervaluationCalculator:
             logger.error(f"Error in calculate_all_scores_batch: {e}")
             raise
     
-    def calculate_score_from_data(self, data: Dict) -> Optional[Dict]:
-        """Calculate undervaluation score from pre-fetched data"""
+    def calculate_scorecard_from_data(self, data: Dict, config) -> Optional[Dict]:
+        """Calculate undervaluation scorecard from pre-fetched data"""
         try:
             symbol = data['symbol']
             
-            # Calculate ratios using vectorized operations where possible
-            price = data.get('price', 0)
-            market_cap = data.get('market_cap', 0)
-            net_income = data.get('net_income', 0)
-            total_revenue = data.get('total_revenue', 0)
-            total_equity = data.get('total_equity', 0)
-            total_assets = data.get('total_assets', 0)
-            total_debt = data.get('total_debt', 0)
-            operating_cash_flow = data.get('operating_cash_flow', 0)
-            free_cash_flow = data.get('free_cash_flow', 0)
+            # Relative Score Calculation (in-lined for batch processing)
+            growth_rates = self.get_historical_growth_rates(symbol)
+            data.update(growth_rates)
+            ratios = self.calculate_financial_ratios(data)
+            if not ratios:
+                return None
             
-            # Calculate ratios
-            ratios = {}
-            ratios['pe_ratio'] = market_cap / net_income if net_income and net_income > 0 else None
-            ratios['pb_ratio'] = market_cap / total_equity if total_equity and total_equity > 0 else None
-            ratios['ps_ratio'] = market_cap / total_revenue if total_revenue and total_revenue > 0 else None
-            ratios['roe'] = net_income / total_equity if total_equity and total_equity > 0 else None
-            ratios['roa'] = net_income / total_assets if total_assets and total_assets > 0 else None
-            ratios['debt_to_equity'] = total_debt / total_equity if total_equity and total_equity > 0 else None
-            ratios['ocf_yield'] = operating_cash_flow / market_cap if market_cap and market_cap > 0 else None
-            ratios['fcf_yield'] = free_cash_flow / market_cap if market_cap and market_cap > 0 else None
+            sector_avg = self.get_sector_averages(data.get('sector', 'Unknown'))
             
-            # Calculate scores using existing scoring logic
             scores = {}
+            if 'pe_ratio' in ratios and ratios['pe_ratio'] > 0:
+                pe_score = max(0, min(100, 100 * (sector_avg['avg_pe'] / ratios['pe_ratio'])))
+                scores['pe_score'] = pe_score
+            if 'pb_ratio' in ratios and ratios['pb_ratio'] > 0:
+                pb_score = max(0, min(100, 100 * (sector_avg['avg_pb'] / ratios['pb_ratio'])))
+                scores['pb_score'] = pb_score
+            if 'ps_ratio' in ratios and ratios['ps_ratio'] > 0:
+                ps_score = max(0, min(100, 100 * (sector_avg['avg_ps'] / ratios['ps_ratio'])))
+                scores['ps_score'] = ps_score
+            if 'peg_ratio' in ratios and ratios['peg_ratio'] > 0:
+                peg = ratios['peg_ratio']
+                if peg <= 1.0:
+                    peg_score = 100
+                else:
+                    peg_score = max(0, 100 - (peg - 1.0) * 50)
+                scores['peg_score'] = peg_score
+            if 'roe' in ratios:
+                roe_score = max(0, min(100, (ratios['roe'] / sector_avg['avg_roe']) * 100))
+                scores['roe_score'] = roe_score
+            if 'roa' in ratios:
+                roa_score = max(0, min(100, (ratios['roa'] / sector_avg['avg_roa']) * 100))
+                scores['roa_score'] = roa_score
+            if 'current_ratio' in ratios:
+                cr = ratios['current_ratio']
+                if 1.5 <= cr <= 2.5:
+                    cr_score = 100
+                elif cr < 1.0:
+                    cr_score = 0
+                elif cr < 1.5:
+                    cr_score = 50 + (cr - 1.0) * 100
+                else:
+                    cr_score = max(0, 100 - (cr - 2.5) * 20)
+                scores['current_ratio_score'] = cr_score
+            if 'debt_to_equity' in ratios:
+                de_score = max(0, min(100, 100 * (1 - ratios['debt_to_equity'] / 2)))
+                scores['debt_equity_score'] = de_score
+            if 'fcf_yield' in ratios:
+                fcf_score = max(0, min(100, ratios['fcf_yield'] * 1000))
+                scores['fcf_score'] = fcf_score
+
+            value_scores = [scores.get('pe_score'), scores.get('pb_score'), scores.get('ps_score'), scores.get('peg_score')]
+            quality_scores = [scores.get('roe_score'), scores.get('roa_score')]
+            strength_scores = [scores.get('current_ratio_score'), scores.get('debt_equity_score')]
+            cash_scores = [scores.get('fcf_score')]
+
+            value_avg = sum(s for s in value_scores if s is not None) / len([s for s in value_scores if s is not None]) if any(s is not None for s in value_scores) else 0
+            quality_avg = sum(s for s in quality_scores if s is not None) / len([s for s in quality_scores if s is not None]) if any(s is not None for s in quality_scores) else 0
+            strength_avg = sum(s for s in strength_scores if s is not None) / len([s for s in strength_scores if s is not None]) if any(s is not None for s in strength_scores) else 0
+            cash_avg = sum(s for s in cash_scores if s is not None) / len([s for s in cash_scores if s is not None]) if any(s is not None for s in cash_scores) else 0
+
+            final_score = (value_avg * 0.4 + quality_avg * 0.3 + strength_avg * 0.2 + cash_avg * 0.1)
             
-            # Valuation Scores (Lower is better)
-            scores['pe_score'] = self.score_pe_ratio(ratios.get('pe_ratio'))
-            scores['pb_score'] = self.score_pb_ratio(ratios.get('pb_ratio'))
-            scores['ps_score'] = self.score_ps_ratio(ratios.get('ps_ratio'))
-            
-            # Quality Scores (Higher is better)
-            scores['roe_score'] = self.score_roe(ratios.get('roe'))
-            scores['roa_score'] = self.score_roa(ratios.get('roa'))
-            
-            # Strength Scores (Lower debt is better)
-            scores['debt_score'] = self.score_debt_to_equity(ratios.get('debt_to_equity'))
-            
-            # Cash Flow Scores (Higher is better)
-            scores['ocf_score'] = self.score_cash_flow_yield(ratios.get('ocf_yield'))
-            scores['fcf_score'] = self.score_cash_flow_yield(ratios.get('fcf_yield'))
-            
-            # Calculate component averages
-            valuation_scores = [s for s in [scores['pe_score'], scores['pb_score'], scores['ps_score']] if s is not None]
-            quality_scores = [s for s in [scores['roe_score'], scores['roa_score']] if s is not None]
-            strength_scores = [s for s in [scores['debt_score']] if s is not None]
-            cash_flow_scores = [s for s in [scores['ocf_score'], scores['fcf_score']] if s is not None]
-            
-            # Determine data quality
-            total_metrics = len([r for r in ratios.values() if r is not None])
-            if total_metrics >= 6:
-                data_quality = "high"
-            elif total_metrics >= 4:
-                data_quality = "medium"
+            data_points = len([s for s in scores.values() if s is not None])
+            if data_points >= 6:
+                data_quality = 'high'
+            elif data_points >= 3:
+                data_quality = 'medium'
             else:
-                data_quality = "low"
-            
-            # Calculate weighted final score
-            value_avg = sum(valuation_scores) / len(valuation_scores) if valuation_scores else 50
-            quality_avg = sum(quality_scores) / len(quality_scores) if quality_scores else 50
-            strength_avg = sum(strength_scores) / len(strength_scores) if strength_scores else 50
-            cash_flow_avg = sum(cash_flow_scores) / len(cash_flow_scores) if cash_flow_scores else 50
-            
-            # Weighted average
-            final_score = (value_avg * 0.4 + quality_avg * 0.3 + strength_avg * 0.2 + cash_flow_avg * 0.1)
-            
-            return {
+                data_quality = 'low'
+
+            relative_score_data = {
                 'symbol': symbol,
                 'undervaluation_score': round(final_score, 1),
                 'valuation_score': round(value_avg, 1),
@@ -549,12 +818,52 @@ class YFinanceUndervaluationCalculator:
                 'risk_score': round(100 - strength_avg, 1),
                 'data_quality': data_quality,
                 'sector': data.get('sector'),
-                'price': price,
-                'market_cap': market_cap,
+                'price': data.get('price'),
+                'market_cap': data.get('market_cap'),
+                'ratios': ratios,
+                'individual_scores': scores
+            }
+            # End of in-lined relative score calculation
+
+            # DDM and DCF
+            risk_free_rate = config.VALUATION_CONFIG['risk_free_rate']
+            equity_risk_premium = config.VALUATION_CONFIG['equity_risk_premium']
+            beta = data.get('beta')
+
+            ddm_value = None
+            if beta:
+                ddm_value = self.calculate_ddm_value(symbol, beta, risk_free_rate, equity_risk_premium)
+
+            dcf_value = self.calculate_dcf_value(symbol, risk_free_rate, equity_risk_premium)
+
+            # Synthesize Results
+            final_intrinsic_value = None
+            weights = {'dcf': 0.5, 'ddm': 0.2, 'relative': 0.3}
+            values = []
+            if dcf_value:
+                values.append(dcf_value * weights['dcf'])
+            if ddm_value:
+                values.append(ddm_value * weights['ddm'])
+            
+            if relative_score_data.get('undervaluation_score'):
+                relative_value = relative_score_data['price'] * (1 + (relative_score_data['undervaluation_score'] - 50) / 100)
+                values.append(relative_value * weights['relative'])
+
+            if values:
+                final_intrinsic_value = sum(values) / sum(weights[k] for k, v in {'dcf': dcf_value, 'ddm': ddm_value, 'relative': relative_value}.items() if v is not None)
+
+            # Combine all data
+            scorecard = {
+                **relative_score_data,
+                'dcf_value': dcf_value,
+                'ddm_value': ddm_value,
+                'final_intrinsic_value': final_intrinsic_value,
             }
             
+            return scorecard
+            
         except Exception as e:
-            logger.error(f"Error calculating score for {data.get('symbol', 'unknown')}: {e}")
+            logger.error(f"Error calculating scorecard for {data.get('symbol', 'unknown')}: {e}")
             return None
     
     def save_batch_undervaluation_scores(self, batch_scores: List[Dict]):
@@ -565,11 +874,13 @@ class YFinanceUndervaluationCalculator:
                 conn.execute(text("""
                     INSERT INTO undervaluation_scores 
                     (symbol, sector, undervaluation_score, valuation_score, quality_score, 
-                     strength_score, risk_score, data_quality, price, mktcap, updated_at)
+                     strength_score, risk_score, data_quality, price, mktcap, updated_at,
+                     dcf_value, ddm_value, final_intrinsic_value)
                     VALUES 
                     """ + ",".join([
                         "(:symbol_{i}, :sector_{i}, :undervaluation_score_{i}, :valuation_score_{i}, :quality_score_{i}, "
-                        ":strength_score_{i}, :risk_score_{i}, :data_quality_{i}, :price_{i}, :mktcap_{i}, CURRENT_TIMESTAMP)".format(i=i)
+                        ":strength_score_{i}, :risk_score_{i}, :data_quality_{i}, :price_{i}, :mktcap_{i}, CURRENT_TIMESTAMP, "
+                        ":dcf_value_{i}, :ddm_value_{i}, :final_intrinsic_value_{i})".format(i=i)
                         for i in range(len(batch_scores))
                     ]) + """
                     ON CONFLICT (symbol) DO UPDATE SET
@@ -582,7 +893,10 @@ class YFinanceUndervaluationCalculator:
                     data_quality = EXCLUDED.data_quality,
                     price = EXCLUDED.price,
                     mktcap = EXCLUDED.mktcap,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = CURRENT_TIMESTAMP,
+                    dcf_value = EXCLUDED.dcf_value,
+                    ddm_value = EXCLUDED.ddm_value,
+                    final_intrinsic_value = EXCLUDED.final_intrinsic_value
                 """), {
                     **{f'symbol_{i}': score['symbol'] for i, score in enumerate(batch_scores)},
                     **{f'sector_{i}': score['sector'] for i, score in enumerate(batch_scores)},
@@ -594,6 +908,9 @@ class YFinanceUndervaluationCalculator:
                     **{f'data_quality_{i}': score['data_quality'] for i, score in enumerate(batch_scores)},
                     **{f'price_{i}': score['price'] for i, score in enumerate(batch_scores)},
                     **{f'mktcap_{i}': score['market_cap'] for i, score in enumerate(batch_scores)},
+                    **{f'dcf_value_{i}': score.get('dcf_value') for i, score in enumerate(batch_scores)},
+                    **{f'ddm_value_{i}': score.get('ddm_value') for i, score in enumerate(batch_scores)},
+                    **{f'final_intrinsic_value_{i}': score.get('final_intrinsic_value') for i, score in enumerate(batch_scores)},
                 })
                 conn.commit()
                 
@@ -667,7 +984,7 @@ class YFinanceUndervaluationCalculator:
             
             for symbol in symbols:
                 try:
-                    score_data = self.calculate_undervaluation_score(symbol)
+                    score_data = self.get_valuation_scorecard(symbol)
                     if score_data:
                         self.save_undervaluation_score(score_data)
                         successful += 1
@@ -697,7 +1014,7 @@ def main():
     calculator = YFinanceUndervaluationCalculator()
     
     print("🚀 Starting Yahoo Finance-based undervaluation analysis...")
-    result = calculator.calculate_all_scores()
+    result = calculator.calculate_all_scores_batch()
     
     print("✅ Analysis complete!")
     print(f"📊 Results: {result['successful']}/{result['total_processed']} companies processed ({result['success_rate']:.1f}% success rate)")

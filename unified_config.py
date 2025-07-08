@@ -11,7 +11,7 @@ class BaseConfig:
     """Base configuration with all settings"""
     
     # Application Configuration
-    APP_VERSION = "0.0.19"
+    APP_VERSION = "0.0.20"
     
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')
@@ -199,6 +199,13 @@ class BaseConfig:
         'sector_analysis': 1800,      # 30 minutes - aggregated data
         'stock_basic_info': 86400,    # 24 hours - very stable data
         'historical_prices': 300,     # 5 minutes - can change during market hours
+    }
+
+    # Valuation Configuration
+    VALUATION_CONFIG = {
+        'risk_free_rate': 0.04,  # 4.0% as a baseline (e.g., 10-year Treasury yield)
+        'equity_risk_premium': 0.05,  # 5.0% as a baseline
+        'beta_calculation_period_years': 5, # Years of historical data for Beta
     }
     
     @classmethod

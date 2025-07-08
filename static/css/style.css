@@ -316,3 +316,43 @@ footer {
 .sector-telecommunications { border-left-color: #e67e22 !important; }
 .sector-realestate { border-left-color: #2ecc71 !important; }
 .sector-consumer { border-left-color: #f1c40f !important; }
+
+/* Valuation Football Field */
+.football-field {
+    padding: 1rem 0;
+}
+
+.ff-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.ff-label {
+    width: 120px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.ff-bar-container {
+    flex-grow: 1;
+    height: 25px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    position: relative;
+}
+
+.ff-bar {
+    position: absolute;
+    height: 100%;
+    background-color: var(--secondary-color);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+}

@@ -473,37 +473,85 @@
             <div class="col-12 mb-4">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Undervaluation Score</h5>
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Valuation Scorecard</h5>
                     </div>
                     <div class="card-body text-center">
-                        {% set score = stock.undervaluation.undervaluation_score %}
-                        {% if score %}
-                            <div class="mb-3">
-                                {% if score >= 80 %}
-                                    <span class="badge bg-success fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
-                                    <h4 class="text-success">Highly Undervalued</h4>
-                                    <p class="text-muted">This stock appears to be significantly undervalued relative to its fundamentals.</p>
-                                {% elif score >= 60 %}
-                                    <span class="badge bg-warning fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
-                                    <h4 class="text-warning">Moderately Undervalued</h4>
-                                    <p class="text-muted">This stock shows signs of being undervalued based on our analysis.</p>
-                                {% elif score >= 40 %}
-                                    <span class="badge bg-info fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
-                                    <h4 class="text-info">Fairly Valued</h4>
-                                    <p class="text-muted">This stock appears to be trading near its fair value.</p>
+                        {% if stock.undervaluation.final_intrinsic_value %}
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h4 class="text-muted">Intrinsic Value</h4>
+                                    <p class="display-4 text-success">${{ "%.2f"|format(stock.undervaluation.final_intrinsic_value) }}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <h4 class="text-muted">Market Price</h4>
+                                    <p class="display-4">${{ "%.2f"|format(stock.profile.price) }}</p>
+                                </div>
+                            </div>
+                            {% set discount_premium = (stock.undervaluation.final_intrinsic_value - stock.profile.price) / stock.profile.price * 100 %}
+                            <div class="mt-3">
+                                {% if discount_premium > 15 %}
+                                    <p class="lead text-success">The stock is potentially <strong>{{ "%.1f"|format(discount_premium) }}% undervalued</strong>.</p>
+                                {% elif discount_premium < -15 %}
+                                    <p class="lead text-danger">The stock is potentially <strong>{{ "%.1f"|format(discount_premium|abs) }}% overvalued</strong>.</p>
                                 {% else %}
-                                    <span class="badge bg-danger fs-1 mb-2">{{ "%.1f"|format(score) }}</span>
-                                    <h4 class="text-danger">Overvalued</h4>
-                                    <p class="text-muted">This stock may be overvalued relative to its fundamentals.</p>
+                                    <p class="lead text-info">The stock appears to be <strong>fairly valued</strong>.</p>
                                 {% endif %}
                             </div>
-                            <small class="text-muted">Data Quality: <span class="badge bg-secondary">{{ stock.undervaluation.data_quality|title }}</span></small>
                         {% else %}
                             <div class="alert alert-warning">
                                 <i class="fas fa-exclamation-triangle me-2"></i>
-                                <strong>No Score Available:</strong> Insufficient data to calculate undervaluation score.
+                                <strong>No Intrinsic Value Available:</strong> Insufficient data for a full valuation.
                             </div>
                         {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Valuation Football Field -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Valuation Model Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="football-field">
+                            {% if stock.undervaluation.dcf_value %}
+                            <div class="ff-row">
+                                <div class="ff-label">DCF Value</div>
+                                <div class="ff-bar-container">
+                                    <div class="ff-bar" style="left: {{ (stock.undervaluation.dcf_value / stock.profile.price * 50 - 10)|int }}%; width: 20%;">
+                                        ${{ "%.2f"|format(stock.undervaluation.dcf_value) }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if stock.undervaluation.ddm_value %}
+                            <div class="ff-row">
+                                <div class="ff-label">DDM Value</div>
+                                <div class="ff-bar-container">
+                                    <div class="ff-bar" style="left: {{ (stock.undervaluation.ddm_value / stock.profile.price * 50 - 10)|int }}%; width: 20%;">
+                                        ${{ "%.2f"|format(stock.undervaluation.ddm_value) }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if stock.undervaluation.undervaluation_score %}
+                            {% set relative_value = stock.profile.price * (1 + (stock.undervaluation.undervaluation_score - 50) / 100) %}
+                            <div class="ff-row">
+                                <div class="ff-label">Relative Value</div>
+                                <div class="ff-bar-container">
+                                    <div class="ff-bar" style="left: {{ (relative_value / stock.profile.price * 50 - 10)|int }}%; width: 20%;">
+                                        ${{ "%.2f"|format(relative_value) }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="text-center mt-2">
+                            <span class="badge bg-secondary">Current Price: ${{ "%.2f"|format(stock.profile.price) }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -515,7 +563,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Valuation Metrics (40%)</h5>
+                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Relative Valuation Score</h5>
                     </div>
                     <div class="card-body">
                         {% if stock.undervaluation.valuation_score %}
@@ -527,8 +575,7 @@
                             <div class="progress-bar" style="width: {{ stock.undervaluation.valuation_score }}%"></div>
                         </div>
                         <small class="text-muted">
-                            Evaluates P/E, P/B, and Price/Sales ratios relative to sector averages.
-                            Lower ratios indicate better value.
+                            Evaluates P/E, P/B, P/S and PEG ratios relative to sector averages.
                         </small>
                         {% else %}
                         <div class="alert alert-info mb-0">
@@ -542,7 +589,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quality Metrics (30%)</h5>
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quality Score</h5>
                     </div>
                     <div class="card-body">
                         {% if stock.undervaluation.quality_score %}
@@ -554,8 +601,7 @@
                             <div class="progress-bar bg-success" style="width: {{ stock.undervaluation.quality_score }}%"></div>
                         </div>
                         <small class="text-muted">
-                            Measures profitability through ROE, profit margins, and financial ratios.
-                            Higher scores indicate better business quality.
+                            Measures profitability through ROE and ROA.
                         </small>
                         {% else %}
                         <div class="alert alert-info mb-0">
@@ -569,7 +615,7 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Financial Strength (20%)</h5>
+                        <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Financial Strength Score</h5>
                     </div>
                     <div class="card-body">
                         {% if stock.undervaluation.strength_score %}
@@ -581,8 +627,7 @@
                             <div class="progress-bar bg-warning" style="width: {{ stock.undervaluation.strength_score }}%"></div>
                         </div>
                         <small class="text-muted">
-                            Assesses debt levels, current ratio, and return on assets.
-                            Higher scores indicate stronger financial position.
+                            Assesses debt levels and current ratio.
                         </small>
                         {% else %}
                         <div class="alert alert-info mb-0">
@@ -596,24 +641,23 @@
             <div class="col-md-6 mb-4">
                 <div class="card h-100">
                     <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Risk Adjustment (10%)</h5>
+                        <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Cash Flow Score</h5>
                     </div>
                     <div class="card-body">
-                        {% if stock.undervaluation.risk_score %}
+                        {% if stock.undervaluation.cash_flow_score %}
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <span>Score:</span>
-                            <span class="badge bg-info fs-6">{{ "%.1f"|format(stock.undervaluation.risk_score) }}</span>
+                            <span class="badge bg-info fs-6">{{ "%.1f"|format(stock.undervaluation.cash_flow_score) }}</span>
                         </div>
                         <div class="progress mb-3">
-                            <div class="progress-bar bg-info" style="width: {{ stock.undervaluation.risk_score }}%"></div>
+                            <div class="progress-bar bg-info" style="width: {{ stock.undervaluation.cash_flow_score }}%"></div>
                         </div>
                         <small class="text-muted">
-                            Considers beta volatility and market capitalization.
-                            Adjusts for stock-specific risk factors.
+                            Considers free cash flow yield.
                         </small>
                         {% else %}
                         <div class="alert alert-info mb-0">
-                            <small>Risk adjustment metrics not available</small>
+                            <small>Cash flow metrics not available</small>
                         </div>
                         {% endif %}
                     </div>
@@ -630,24 +674,20 @@
                     </div>
                     <div class="card-body">
                         <p class="mb-3">
-                            Our undervaluation score is calculated using a weighted approach that considers multiple factors:
+                            The intrinsic value is a weighted average of multiple valuation models:
                         </p>
                         <ul class="list-unstyled">
                             <li class="mb-2">
-                                <i class="fas fa-chart-pie text-primary me-2"></i>
-                                <strong>Valuation Metrics (40%):</strong> P/E, P/B, and Price/Sales ratios compared to sector averages
+                                <i class="fas fa-calculator text-primary me-2"></i>
+                                <strong>Discounted Cash Flow (50%):</strong> Projects future cash flows and discounts them to the present.
                             </li>
                             <li class="mb-2">
-                                <i class="fas fa-chart-line text-success me-2"></i>
-                                <strong>Quality Metrics (30%):</strong> ROE, profit margins, and cash flow metrics
+                                <i class="fas fa-users text-success me-2"></i>
+                                <strong>Relative Valuation (30%):</strong> Compares the stock's valuation multiples to its peers.
                             </li>
                             <li class="mb-2">
-                                <i class="fas fa-shield-alt text-warning me-2"></i>
-                                <strong>Financial Strength (20%):</strong> Debt ratios, current ratio, and return on assets
-                            </li>
-                            <li class="mb-2">
-                                <i class="fas fa-exclamation-triangle text-info me-2"></i>
-                                <strong>Risk Adjustment (10%):</strong> Beta and market cap considerations
+                                <i class="fas fa-money-bill-wave text-warning me-2"></i>
+                                <strong>Dividend Discount Model (20%):</strong> Values the stock based on its future dividend payments (if applicable).
                             </li>
                         </ul>
                         <div class="alert alert-info mt-3">

@@ -9,6 +9,9 @@ from database import DatabaseManager
 from sqlalchemy import text
 import logging
 from cache_utils import cached_function, get_config
+from datetime import datetime, timedelta
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -1057,3 +1060,54 @@ class StockDataService:
         except Exception as e:
             logger.error(f"Error getting comprehensive stock data for {symbol}: {e}")
             return {}
+
+    def calculate_beta(self, symbol: str, market_symbol: str = 'SPY') -> Optional[float]:
+        """
+        Calculate the beta of a stock relative to a market index.
+
+        Args:
+            symbol: The stock symbol.
+            market_symbol: The market index symbol (default: 'SPY').
+
+        Returns:
+            The calculated beta value, or None if calculation is not possible.
+        """
+        try:
+            config = get_config()
+            period_years = config.VALUATION_CONFIG['beta_calculation_period_years']
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=period_years * 365)
+
+            # Get historical data
+            stock_prices = self.get_historical_prices(symbol, start_date, end_date)
+            market_prices = self.get_historical_prices(market_symbol, start_date, end_date)
+
+            if len(stock_prices) < 2 or len(market_prices) < 2:
+                logger.warning(f"Not enough historical data to calculate beta for {symbol}")
+                return None
+
+            # Create pandas DataFrames
+            stock_df = pd.DataFrame(stock_prices).set_index('date')['close']
+            market_df = pd.DataFrame(market_prices).set_index('date')['close']
+
+            # Align data by date and calculate daily returns
+            df = pd.concat([stock_df, market_df], axis=1, keys=[symbol, market_symbol]).dropna()
+            returns = df.pct_change().dropna()
+
+            if len(returns) < 2:
+                logger.warning(f"Not enough overlapping data to calculate beta for {symbol}")
+                return None
+
+            # Calculate covariance and variance
+            covariance = returns.cov().iloc[0, 1]
+            market_variance = returns[market_symbol].var()
+
+            if market_variance == 0:
+                return None
+
+            beta = covariance / market_variance
+            return float(beta)
+
+        except Exception as e:
+            logger.error(f"Error calculating beta for {symbol}: {e}")
+            return None
