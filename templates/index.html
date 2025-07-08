@@ -270,8 +270,30 @@ document.addEventListener('DOMContentLoaded', function() {
     let stockItems = document.querySelectorAll('.stock-item');
     const noResults = document.getElementById('noResults');
 
-    // Column sorting functionality
-    let currentSort = { column: 'symbol', direction: 'asc' };
+    // Column sorting functionality - Server-side sorting
+    let currentSort = {
+        column: '{{ filters.sort or "symbol" }}',
+        direction: '{{ filters.order or "asc" }}'
+    };
+    
+    // Initialize sort icons based on current sort
+    initializeSortIcons();
+    
+    function initializeSortIcons() {
+        // Reset all icons
+        document.querySelectorAll('.sort-icon').forEach(icon => {
+            icon.className = 'fas fa-sort sort-icon';
+        });
+        
+        // Set active sort icon
+        const activeHeader = document.querySelector(`[data-sort="${currentSort.column}"]`);
+        if (activeHeader) {
+            const icon = activeHeader.querySelector('.sort-icon');
+            if (icon) {
+                icon.className = `fas fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'} sort-icon`;
+            }
+        }
+    }
     
     // Add click listeners to sortable headers
     document.querySelectorAll('.sortable').forEach(header => {
@@ -280,82 +302,25 @@ document.addEventListener('DOMContentLoaded', function() {
             const sortColumn = this.dataset.sort;
             
             // Toggle direction if same column, otherwise default to asc
+            let newDirection = 'asc';
             if (currentSort.column === sortColumn) {
-                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.direction = 'asc';
+                newDirection = currentSort.direction === 'asc' ? 'desc' : 'asc';
             }
-            currentSort.column = sortColumn;
             
-            // Update sort icons
-            document.querySelectorAll('.sort-icon').forEach(icon => {
-                icon.className = 'fas fa-sort sort-icon';
-            });
-            
-            const icon = this.querySelector('.sort-icon');
-            icon.className = `fas fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'} sort-icon`;
-            
-            // Sort the table
-            sortTable(currentSort.column, currentSort.direction);
+            // Navigate to sorted page
+            sortTable(sortColumn, newDirection);
         });
     });
     
     function sortTable(column, direction) {
-        const tbody = document.querySelector('#stockList tbody');
-        const rows = Array.from(stockItems);
+        // Build URL with sort parameters
+        const url = new URL(window.location);
+        url.searchParams.set('sort', column);
+        url.searchParams.set('order', direction);
+        url.searchParams.set('page', '1'); // Reset to first page when sorting
         
-        rows.sort((a, b) => {
-            let valueA, valueB;
-            
-            switch (column) {
-                case 'symbol':
-                    valueA = a.dataset.symbol;
-                    valueB = b.dataset.symbol;
-                    break;
-                case 'name':
-                    valueA = a.dataset.name;
-                    valueB = b.dataset.name;
-                    break;
-                case 'sector':
-                    valueA = a.dataset.sector || '';
-                    valueB = b.dataset.sector || '';
-                    break;
-                case 'price':
-                    valueA = parseFloat(a.querySelector('td:nth-child(4)').textContent.replace(/[^0-9.-]/g, '')) || 0;
-                    valueB = parseFloat(b.querySelector('td:nth-child(4)').textContent.replace(/[^0-9.-]/g, '')) || 0;
-                    break;
-                case 'market_cap':
-                    valueA = parseFloat(a.querySelector('td:nth-child(5)').textContent.replace(/[^0-9.-]/g, '')) || 0;
-                    valueB = parseFloat(b.querySelector('td:nth-child(5)').textContent.replace(/[^0-9.-]/g, '')) || 0;
-                    break;
-                case 'score':
-                    valueA = parseFloat(a.dataset.undervaluationScore) || -1;
-                    valueB = parseFloat(b.dataset.undervaluationScore) || -1;
-                    // Handle N/A scores
-                    if (valueA === -1 && valueB === -1) {
-                        return a.dataset.symbol.localeCompare(b.dataset.symbol);
-                    }
-                    if (valueA === -1) return direction === 'asc' ? 1 : -1;
-                    if (valueB === -1) return direction === 'asc' ? -1 : 1;
-                    break;
-                default:
-                    valueA = a.dataset.symbol;
-                    valueB = b.dataset.symbol;
-            }
-            
-            // Compare values
-            if (typeof valueA === 'string' && typeof valueB === 'string') {
-                return direction === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
-            } else {
-                return direction === 'asc' ? valueA - valueB : valueB - valueA;
-            }
-        });
-        
-        // Re-append sorted rows
-        rows.forEach(row => tbody.appendChild(row));
-        
-        // Update stockItems reference
-        stockItems = document.querySelectorAll('.stock-item');
+        // Navigate to sorted results
+        window.location.href = url.toString();
     }
 
     function filterStocks() {
@@ -427,8 +392,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Make entire row clickable
         item.style.cursor = 'pointer';
         item.addEventListener('click', function(e) {
-            // Don't trigger if clicking on sortable headers
-            if (!e.target.closest('.sortable')) {
+            // Don't trigger if clicking on sortable headers or sort icons
+            if (!e.target.closest('.sortable') && !e.target.closest('.sort-icon')) {
                 window.location.href = detailUrl;
             }
         });

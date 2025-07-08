@@ -69,17 +69,18 @@ class StockDataService:
                 # Build ORDER BY clause
                 sort_column_map = {
                     'symbol': 's.symbol',
-                    'score': 'u.undervaluation_score',
+                    'name': 's.name',
+                    'sector': 's.sector',
                     'price': 'p.price',
                     'market_cap': 'p.mktcap',
-                    'sector': 's.sector'
+                    'score': 'u.undervaluation_score'
                 }
                 
                 sort_column = sort_column_map.get(sort_by, 's.symbol')
                 sort_direction = 'DESC' if sort_order.upper() == 'DESC' else 'ASC'
                 
-                # For score sorting, handle nulls appropriately
-                if sort_by == 'score':
+                # For numeric columns, handle nulls appropriately
+                if sort_by in ['score', 'price', 'market_cap']:
                     if sort_order.upper() == 'DESC':
                         order_clause = f"ORDER BY {sort_column} DESC NULLS LAST"
                     else:
