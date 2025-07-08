@@ -27,9 +27,11 @@ class YFinanceUndervaluationCalculator:
         """Get comprehensive financial data for a symbol from our database"""
         try:
             with self.db.engine.connect() as conn:
-                # Get company profile data
+                # Get company profile data including enhanced metrics
                 profile_data = conn.execute(text("""
-                    SELECT symbol, companyname, price, mktcap, sector, industry
+                    SELECT symbol, companyname, price, mktcap, sector, industry, beta,
+                           shares_outstanding, book_value, peg_ratio, forward_pe, 
+                           return_on_equity, return_on_assets, operating_cashflow, free_cashflow
                     FROM company_profiles 
                     WHERE symbol = :symbol
                 """), {'symbol': symbol}).fetchone()
@@ -64,15 +66,31 @@ class YFinanceUndervaluationCalculator:
                     LIMIT 1
                 """), {'symbol': symbol}).fetchone()
                 
-                # Combine all data
+                # Combine all data including enhanced metrics
                 result = {
                     'symbol': profile_data.symbol,
                     'company_name': profile_data.companyname,
                     'price': profile_data.price,
                     'market_cap': profile_data.mktcap,
                     'sector': profile_data.sector,
-                    'industry': profile_data.industry
+                    'industry': profile_data.industry,
+                    'beta': profile_data.beta,
+                    'book_value': profile_data.book_value,
+                    'peg_ratio': profile_data.peg_ratio,
+                    'forward_pe': profile_data.forward_pe,
+                    'return_on_equity': profile_data.return_on_equity,
+                    'return_on_assets': profile_data.return_on_assets
                 }
+                
+                # Add enhanced shares_outstanding if available (prioritize profile data)
+                if profile_data.shares_outstanding:
+                    result['shares_outstanding'] = profile_data.shares_outstanding
+                
+                # Add enhanced cash flow data if available (prioritize profile data)
+                if profile_data.operating_cashflow:
+                    result['operating_cash_flow'] = profile_data.operating_cashflow
+                if profile_data.free_cashflow:
+                    result['free_cash_flow'] = profile_data.free_cashflow
                 
                 if income_data:
                     result.update({
@@ -299,20 +317,26 @@ class YFinanceUndervaluationCalculator:
             if data.get('price') and data.get('eps') and data.get('eps') > 0:
                 ratios['pe_ratio'] = data['price'] / data['eps']
             
-            # Price-to-Book ratio
-            if data.get('market_cap') and data.get('total_equity') and data.get('total_equity') > 0:
+            # Price-to-Book ratio (use enhanced book_value if available)
+            if data.get('price') and data.get('book_value') and data.get('book_value') > 0:
+                ratios['pb_ratio'] = data['price'] / data['book_value']
+            elif data.get('market_cap') and data.get('total_equity') and data.get('total_equity') > 0:
                 ratios['pb_ratio'] = data['market_cap'] / data['total_equity']
             
             # Price-to-Sales ratio
             if data.get('market_cap') and data.get('revenue') and data.get('revenue') > 0:
                 ratios['ps_ratio'] = data['market_cap'] / data['revenue']
             
-            # Return on Equity
-            if data.get('net_income') and data.get('total_equity') and data.get('total_equity') > 0:
+            # Return on Equity (use enhanced data if available)
+            if data.get('return_on_equity'):
+                ratios['roe'] = data['return_on_equity']
+            elif data.get('net_income') and data.get('total_equity') and data.get('total_equity') > 0:
                 ratios['roe'] = data['net_income'] / data['total_equity']
             
-            # Return on Assets
-            if data.get('net_income') and data.get('total_assets') and data.get('total_assets') > 0:
+            # Return on Assets (use enhanced data if available)
+            if data.get('return_on_assets'):
+                ratios['roa'] = data['return_on_assets']
+            elif data.get('net_income') and data.get('total_assets') and data.get('total_assets') > 0:
                 ratios['roa'] = data['net_income'] / data['total_assets']
             
             # Debt-to-Equity ratio
@@ -327,9 +351,15 @@ class YFinanceUndervaluationCalculator:
             if data.get('free_cash_flow') and data.get('market_cap') and data.get('market_cap') > 0:
                 ratios['fcf_yield'] = data['free_cash_flow'] / data['market_cap']
 
-            # PEG Ratio
-            if ratios.get('pe_ratio') and data.get('earnings_growth_3y') and data.get('earnings_growth_3y') > 0:
+            # PEG Ratio (use enhanced data if available)
+            if data.get('peg_ratio'):
+                ratios['peg_ratio'] = data['peg_ratio']
+            elif ratios.get('pe_ratio') and data.get('earnings_growth_3y') and data.get('earnings_growth_3y') > 0:
                 ratios['peg_ratio'] = ratios['pe_ratio'] / (data['earnings_growth_3y'] * 100)
+            
+            # Forward PE Ratio
+            if data.get('forward_pe'):
+                ratios['forward_pe'] = data['forward_pe']
             
         except Exception as e:
             logger.error(f"Error calculating ratios for {data.get('symbol', 'unknown')}: {e}")
