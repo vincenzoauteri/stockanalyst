@@ -5,11 +5,21 @@ Flask web app to display stock data and fundamentals
 Uses separate data access layer for better separation of concerns
 """
 
+import json
+import os
+import signal
+import sys
+import threading
+import time
+from datetime import datetime, date
+
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
+from werkzeug.serving import make_server
+
+from api_documentation import create_api_documentation
+from api_routes import api_v2
 from auth import login_required, get_current_user
 from logging_config import setup_logging, get_logger
-from api_routes import api_v2
-from api_documentation import create_api_documentation
 from services import (
     get_stock_service,
     get_fmp_client,
@@ -17,14 +27,6 @@ from services import (
     get_auth_manager,
     get_portfolio_manager
 )
-import json
-import os
-import signal
-import sys
-import threading
-import time
-from werkzeug.serving import make_server
-from datetime import datetime, date
 
 # Configure centralized logging
 setup_logging(log_level="INFO", enable_file_logging=True, enable_console_logging=True)
@@ -64,7 +66,7 @@ def to_json_filter(obj):
         if isinstance(o, (datetime, date)):
             return o.isoformat()
         raise TypeError(f"Object of type {type(o)} is not JSON serializable")
-    
+
     return json.dumps(obj, default=date_serializer)
 
 
@@ -73,15 +75,14 @@ def index():
     """Main page showing list of S&P 500 stocks"""
     try:
         service = get_stock_service()
-        
+
         # Get all stocks with their scores and profiles
         stocks_list = service.get_all_stocks_with_scores()
-        
+
         # Get summary statistics
         stats = service.get_stock_summary_stats(stocks_list)
-        
+
         return render_template('index.html', stocks=stocks_list, stats=stats)
-        
     except AttributeError as e:
         logger.error(f"Service method not available in index route: {e}")
         return render_template('error.html', error='Service temporarily unavailable'), 503

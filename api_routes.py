@@ -4,7 +4,10 @@ API Routes for Stock Analyst Application
 RESTful API endpoints for programmatic access to stock data and portfolio management
 """
 
+from datetime import datetime, date
+
 from flask import Blueprint, request, jsonify, session
+
 from auth import login_required
 from logging_config import get_logger
 from services import (
@@ -14,7 +17,6 @@ from services import (
     get_auth_manager,
     get_portfolio_manager
 )
-from datetime import datetime, date
 
 logger = get_logger(__name__)
 

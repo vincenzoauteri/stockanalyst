@@ -4,12 +4,12 @@ Service Registry for Stock Analyst Application
 Centralized service management to avoid circular imports and duplication
 """
 
+from auth import AuthenticationManager
 from data_access_layer import StockDataService
 from fmp_client import FMPClient
-from undervaluation_analyzer import UndervaluationAnalyzer
-from auth import AuthenticationManager
-from portfolio import PortfolioManager
 from logging_config import get_logger
+from portfolio import PortfolioManager
+from undervaluation_analyzer import UndervaluationAnalyzer
 
 logger = get_logger(__name__)
 
