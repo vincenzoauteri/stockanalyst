@@ -39,25 +39,6 @@
     </div>
 </div>
 
-<!-- Undervaluation Controls -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="btn-group" role="group">
-            <button type="button" class="btn btn-outline-primary" id="calculateBtn">
-                <i class="fas fa-calculator me-2"></i>Calculate Undervaluation
-            </button>
-            <button type="button" class="btn btn-outline-secondary" id="sortToggleBtn" data-sort="desc">
-                <i class="fas fa-sort-amount-down me-2"></i>Most Undervalued First
-            </button>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="alert alert-info py-2" role="alert" style="display: none;" id="calculationStatus">
-            <i class="fas fa-info-circle me-2"></i>
-            <span id="statusMessage">Ready to calculate undervaluation scores</span>
-        </div>
-    </div>
-</div>
 
 <!-- Stock List -->
 <div class="card" id="stockList">
@@ -72,19 +53,36 @@
             <table class="table table-hover mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th scope="col" width="8%">Symbol</th>
-                        <th scope="col" width="20%">Company Name</th>
-                        <th scope="col" width="12%">Sector</th>
-                        <th scope="col" width="12%">Sub-Sector</th>
-                        <th scope="col" width="8%">Price</th>
-                        <th scope="col" width="10%">Market Cap</th>
-                        <th scope="col" width="12%">
+                        <th scope="col" width="10%" class="sortable" data-sort="symbol">
                             <span class="text-nowrap">
-                                <i class="fas fa-chart-bar me-1"></i>Undervaluation Score
+                                Symbol <i class="fas fa-sort sort-icon"></i>
                             </span>
                         </th>
-                        <th scope="col" width="8%">Profile</th>
-                        <th scope="col" width="5%">Actions</th>
+                        <th scope="col" width="25%" class="sortable" data-sort="name">
+                            <span class="text-nowrap">
+                                Company Name <i class="fas fa-sort sort-icon"></i>
+                            </span>
+                        </th>
+                        <th scope="col" width="15%" class="sortable" data-sort="sector">
+                            <span class="text-nowrap">
+                                Sector <i class="fas fa-sort sort-icon"></i>
+                            </span>
+                        </th>
+                        <th scope="col" width="10%" class="sortable" data-sort="price">
+                            <span class="text-nowrap">
+                                Price <i class="fas fa-sort sort-icon"></i>
+                            </span>
+                        </th>
+                        <th scope="col" width="12%" class="sortable" data-sort="market_cap">
+                            <span class="text-nowrap">
+                                Market Cap <i class="fas fa-sort sort-icon"></i>
+                            </span>
+                        </th>
+                        <th scope="col" width="15%" class="sortable" data-sort="score">
+                            <span class="text-nowrap">
+                                <i class="fas fa-chart-bar me-1"></i>Undervaluation Score <i class="fas fa-sort sort-icon"></i>
+                            </span>
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
@@ -115,13 +113,6 @@
                         <td>
                             {% if stock.sector %}
                             <span class="badge bg-primary">{{ stock.sector }}</span>
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if stock.sub_sector %}
-                            <span class="badge bg-info">{{ stock.sub_sector }}</span>
                             {% else %}
                             <span class="text-muted">-</span>
                             {% endif %}
@@ -160,24 +151,6 @@
                                 <span class="badge bg-secondary">N/A</span>
                                 <br><small class="text-muted">Insufficient Data</small>
                             {% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if stock.has_profile %}
-                            <span class="badge bg-success">
-                                <i class="fas fa-check-circle"></i> Yes
-                            </span>
-                            {% else %}
-                            <span class="badge bg-secondary">
-                                <i class="fas fa-minus-circle"></i> No
-                            </span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" 
-                               class="btn btn-outline-primary btn-sm"
-                               title="View Details">
-                                <i class="fas fa-chart-line"></i>
-                            </a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -294,83 +267,87 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const sectorFilter = document.getElementById('sectorFilter');
     const profileFilter = document.getElementById('profileFilter');
-    const calculateBtn = document.getElementById('calculateBtn');
-    const sortToggleBtn = document.getElementById('sortToggleBtn');
-    const calculationStatus = document.getElementById('calculationStatus');
-    const statusMessage = document.getElementById('statusMessage');
     let stockItems = document.querySelectorAll('.stock-item');
     const noResults = document.getElementById('noResults');
 
-    // Undervaluation calculation functionality
-    calculateBtn.addEventListener('click', function() {
-        calculationStatus.style.display = '';
-        statusMessage.textContent = 'Calculating undervaluation scores...';
-        calculationStatus.className = 'alert alert-info py-2';
-        
-        fetch('/api/analysis/run', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({})
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-                const summary = data.summary;
-                statusMessage.textContent = `Analysis complete! Analyzed ${summary.analyzed_stocks} stocks, found ${summary.highly_undervalued} highly undervalued.`;
-                calculationStatus.className = 'alert alert-success py-2';
-                
-                // Reload page to show updated scores
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
-            })
-            .catch(error => {
-                statusMessage.textContent = `Error: ${error.message}`;
-                calculationStatus.className = 'alert alert-danger py-2';
+    // Column sorting functionality
+    let currentSort = { column: 'symbol', direction: 'asc' };
+    
+    // Add click listeners to sortable headers
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', function() {
+            const sortColumn = this.dataset.sort;
+            
+            // Toggle direction if same column, otherwise default to asc
+            if (currentSort.column === sortColumn) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.direction = 'asc';
+            }
+            currentSort.column = sortColumn;
+            
+            // Update sort icons
+            document.querySelectorAll('.sort-icon').forEach(icon => {
+                icon.className = 'fas fa-sort sort-icon';
             });
+            
+            const icon = this.querySelector('.sort-icon');
+            icon.className = `fas fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'} sort-icon`;
+            
+            // Sort the table
+            sortTable(currentSort.column, currentSort.direction);
+        });
     });
-
-    // Sort toggle functionality
-    sortToggleBtn.addEventListener('click', function() {
-        const currentSort = this.dataset.sort;
-        const newSort = currentSort === 'desc' ? 'asc' : 'desc';
-        
-        this.dataset.sort = newSort;
-        if (newSort === 'desc') {
-            this.innerHTML = '<i class="fas fa-sort-amount-down me-2"></i>Most Undervalued First';
-        } else {
-            this.innerHTML = '<i class="fas fa-sort-amount-up me-2"></i>Most Overvalued First';
-        }
-        
-        sortStocksByUndervaluation(newSort);
-    });
-
-    function sortStocksByUndervaluation(order = 'desc') {
+    
+    function sortTable(column, direction) {
         const tbody = document.querySelector('#stockList tbody');
         const rows = Array.from(stockItems);
         
         rows.sort((a, b) => {
-            const scoreA = parseFloat(a.dataset.undervaluationScore) || -1;
-            const scoreB = parseFloat(b.dataset.undervaluationScore) || -1;
-            const qualityA = a.dataset.dataQuality;
-            const qualityB = b.dataset.dataQuality;
+            let valueA, valueB;
             
-            // Always put insufficient data at the bottom
-            if (qualityA === 'insufficient' && qualityB !== 'insufficient') return 1;
-            if (qualityA !== 'insufficient' && qualityB === 'insufficient') return -1;
-            if (qualityA === 'insufficient' && qualityB === 'insufficient') {
-                return a.dataset.symbol.localeCompare(b.dataset.symbol);
+            switch (column) {
+                case 'symbol':
+                    valueA = a.dataset.symbol;
+                    valueB = b.dataset.symbol;
+                    break;
+                case 'name':
+                    valueA = a.dataset.name;
+                    valueB = b.dataset.name;
+                    break;
+                case 'sector':
+                    valueA = a.dataset.sector || '';
+                    valueB = b.dataset.sector || '';
+                    break;
+                case 'price':
+                    valueA = parseFloat(a.querySelector('td:nth-child(4)').textContent.replace(/[^0-9.-]/g, '')) || 0;
+                    valueB = parseFloat(b.querySelector('td:nth-child(4)').textContent.replace(/[^0-9.-]/g, '')) || 0;
+                    break;
+                case 'market_cap':
+                    valueA = parseFloat(a.querySelector('td:nth-child(5)').textContent.replace(/[^0-9.-]/g, '')) || 0;
+                    valueB = parseFloat(b.querySelector('td:nth-child(5)').textContent.replace(/[^0-9.-]/g, '')) || 0;
+                    break;
+                case 'score':
+                    valueA = parseFloat(a.dataset.undervaluationScore) || -1;
+                    valueB = parseFloat(b.dataset.undervaluationScore) || -1;
+                    // Handle N/A scores
+                    if (valueA === -1 && valueB === -1) {
+                        return a.dataset.symbol.localeCompare(b.dataset.symbol);
+                    }
+                    if (valueA === -1) return direction === 'asc' ? 1 : -1;
+                    if (valueB === -1) return direction === 'asc' ? -1 : 1;
+                    break;
+                default:
+                    valueA = a.dataset.symbol;
+                    valueB = b.dataset.symbol;
             }
             
-            // Sort by score
-            if (order === 'desc') {
-                return scoreB - scoreA;
+            // Compare values
+            if (typeof valueA === 'string' && typeof valueB === 'string') {
+                return direction === 'asc' ? valueA.localeCompare(valueB) : valueB.localeCompare(valueA);
             } else {
-                return scoreA - scoreB;
+                return direction === 'asc' ? valueA - valueB : valueB - valueA;
             }
         });
         
@@ -450,8 +427,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // Make entire row clickable
         item.style.cursor = 'pointer';
         item.addEventListener('click', function(e) {
-            // Don't trigger if clicking on the action button
-            if (!e.target.closest('.btn')) {
+            // Don't trigger if clicking on sortable headers
+            if (!e.target.closest('.sortable')) {
                 window.location.href = detailUrl;
             }
         });

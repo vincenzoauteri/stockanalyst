@@ -22,6 +22,146 @@
             --danger-color: #e74c3c;
             --warning-color: #f39c12;
             --info-color: #17a2b8;
+            --light-bg: #ffffff;
+            --light-text: #212529;
+            --light-border: #dee2e6;
+            --light-card-bg: #f8f9fa;
+        }
+        
+        [data-theme="dark"] {
+            --primary-color: #3498db;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+            --info-color: #17a2b8;
+            --light-bg: #212529;
+            --light-text: #ffffff;
+            --light-border: #495057;
+            --light-card-bg: #343a40;
+        }
+        
+        body {
+            background-color: var(--light-bg);
+            color: var(--light-text);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        .navbar-light {
+            background-color: var(--light-card-bg) !important;
+            border-color: var(--light-border) !important;
+        }
+        
+        .navbar-light .navbar-brand,
+        .navbar-light .navbar-nav .nav-link {
+            color: var(--light-text) !important;
+        }
+        
+        .navbar-light .navbar-nav .nav-link:hover {
+            color: var(--primary-color) !important;
+        }
+        
+        .card {
+            background-color: var(--light-card-bg);
+            border-color: var(--light-border);
+            color: var(--light-text);
+        }
+        
+        .table {
+            color: var(--light-text);
+        }
+        
+        .table-light {
+            background-color: var(--light-card-bg);
+            border-color: var(--light-border);
+        }
+        
+        .form-control, .form-select {
+            background-color: var(--light-bg);
+            border-color: var(--light-border);
+            color: var(--light-text);
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background-color: var(--light-bg);
+            border-color: var(--primary-color);
+            color: var(--light-text);
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+        }
+        
+        .bg-light {
+            background-color: var(--light-card-bg) !important;
+        }
+        
+        .border-bottom {
+            border-color: var(--light-border) !important;
+        }
+        
+        .border-top {
+            border-color: var(--light-border) !important;
+        }
+        
+        .text-muted {
+            color: #6c757d !important;
+        }
+        
+        .dropdown-menu {
+            background-color: var(--light-card-bg);
+            border-color: var(--light-border);
+        }
+        
+        .dropdown-item {
+            color: var(--light-text);
+        }
+        
+        .dropdown-item:hover {
+            background-color: var(--light-bg);
+            color: var(--light-text);
+        }
+        
+        .alert {
+            border-color: var(--light-border);
+        }
+        
+        .dark-mode-toggle {
+            background: none;
+            border: none;
+            color: var(--light-text);
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        
+        .dark-mode-toggle:hover {
+            color: var(--primary-color);
+        }
+        
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+        
+        .sortable:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        [data-theme="dark"] .sortable:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .sort-icon {
+            margin-left: 5px;
+            opacity: 0.6;
+            font-size: 0.8rem;
+        }
+        
+        .sortable .sort-icon {
+            transition: opacity 0.2s ease;
+        }
+        
+        .sortable:hover .sort-icon {
+            opacity: 1;
         }
         
         .navbar-brand {
@@ -105,6 +245,11 @@
                             <i class="fas fa-code me-1"></i>API
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <button class="nav-link dark-mode-toggle" id="darkModeToggle" title="Toggle dark mode">
+                            <i class="fas fa-moon"></i>
+                        </button>
+                    </li>
                 </ul>
                 
                 <!-- Authentication Navigation -->
@@ -176,6 +321,41 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Dark Mode Toggle Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const html = document.documentElement;
+            
+            // Check for saved theme preference or default to light mode
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            
+            // Apply saved theme
+            if (savedTheme === 'dark') {
+                html.setAttribute('data-theme', 'dark');
+                darkModeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+            } else {
+                html.removeAttribute('data-theme');
+                darkModeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+            }
+            
+            // Toggle dark mode
+            darkModeToggle.addEventListener('click', function() {
+                const currentTheme = html.getAttribute('data-theme');
+                
+                if (currentTheme === 'dark') {
+                    html.removeAttribute('data-theme');
+                    darkModeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+                    localStorage.setItem('theme', 'light');
+                } else {
+                    html.setAttribute('data-theme', 'dark');
+                    darkModeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+                    localStorage.setItem('theme', 'dark');
+                }
+            });
+        });
+    </script>
     
     {% block scripts %}{% endblock %}
 </body>
