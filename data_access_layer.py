@@ -933,9 +933,8 @@ class StockDataService:
                         u.undervaluation_score, u.valuation_score, u.quality_score,
                         u.strength_score, u.risk_score, u.data_quality,
                         
-                        -- Profile and score timestamps
-                        p.updated_at as profile_updated_at,
-                        u.updated_at as score_updated_at
+                        -- Profile timestamp
+                        p.updated_at as profile_updated_at
                         
                     FROM sp500_constituents s
                     LEFT JOIN company_profiles p ON s.symbol = p.symbol
@@ -1002,7 +1001,7 @@ class StockDataService:
                         'strength_score': main_data.strength_score,
                         'risk_score': main_data.risk_score,
                         'data_quality': main_data.data_quality,
-                        'updated_at': main_data.score_updated_at.isoformat() if main_data.score_updated_at else None
+                        'updated_at': None  # No updated_at column in undervaluation_scores table
                     }
                 
                 # Get recent price history (last 252 trading days)
