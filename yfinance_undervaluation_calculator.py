@@ -9,6 +9,7 @@ from database import DatabaseManager
 from sqlalchemy import text
 from logging_config import get_logger
 import pandas as pd
+import numpy as np
 from unified_config import get_config
 
 logger = get_logger(__name__)
@@ -179,7 +180,7 @@ class YFinanceUndervaluationCalculator:
                     # Simple growth rate calculation
                     df = pd.DataFrame(historical_dividends)
                     df = df.sort_values('action_date').reset_index(drop=True)
-                    df['growth'] = df['amount'].pct_change()
+                    df['growth'] = df['amount'].pct_change(fill_method=None)
                     g = df['growth'].mean()
                     if pd.isna(g) or g <= 0:
                         g = 0.025 # Fallback to conservative growth rate
@@ -244,7 +245,7 @@ class YFinanceUndervaluationCalculator:
                     return None
 
                 fcf_df = pd.DataFrame(historical_fcf)
-                fcf_df['growth'] = fcf_df['free_cash_flow'].pct_change()
+                fcf_df['growth'] = fcf_df['free_cash_flow'].pct_change(fill_method=None)
                 fcf_growth_rate = fcf_df['growth'].mean()
                 if pd.isna(fcf_growth_rate) or fcf_growth_rate <= 0:
                     fcf_growth_rate = 0.03 # Conservative growth
@@ -584,28 +585,23 @@ class YFinanceUndervaluationCalculator:
         """Save undervaluation score to database"""
         try:
             with self.db.engine.connect() as conn:
-                conn.execute(text("""
-                    INSERT INTO undervaluation_scores 
-                    (symbol, sector, undervaluation_score, valuation_score, quality_score, 
-                     strength_score, risk_score, data_quality, price, mktcap, updated_at,
-                     dcf_value, ddm_value, final_intrinsic_value)
-                    VALUES (:symbol, :sector, :undervaluation_score, :valuation_score, :quality_score, 
-                            :strength_score, :risk_score, :data_quality, :price, :mktcap, CURRENT_TIMESTAMP,
-                            :dcf_value, :ddm_value, :final_intrinsic_value)
-                    ON CONFLICT (symbol) DO UPDATE SET
-                    sector = EXCLUDED.sector,
-                    undervaluation_score = EXCLUDED.undervaluation_score,
-                    valuation_score = EXCLUDED.valuation_score,
-                    quality_score = EXCLUDED.quality_score,
-                    strength_score = EXCLUDED.strength_score,
-                    risk_score = EXCLUDED.risk_score,
-                    data_quality = EXCLUDED.data_quality,
-                    price = EXCLUDED.price,
-                    mktcap = EXCLUDED.mktcap,
-                    updated_at = CURRENT_TIMESTAMP,
-                    dcf_value = EXCLUDED.dcf_value,
-                    ddm_value = EXCLUDED.ddm_value,
-                    final_intrinsic_value = EXCLUDED.final_intrinsic_value
+                # First, try to update existing record
+                result = conn.execute(text("""
+                    UPDATE undervaluation_scores 
+                    SET sector = :sector,
+                        undervaluation_score = :undervaluation_score,
+                        valuation_score = :valuation_score,
+                        quality_score = :quality_score,
+                        strength_score = :strength_score,
+                        risk_score = :risk_score,
+                        data_quality = :data_quality,
+                        price = :price,
+                        mktcap = :mktcap,
+                        updated_at = CURRENT_TIMESTAMP,
+                        dcf_value = :dcf_value,
+                        ddm_value = :ddm_value,
+                        final_intrinsic_value = :final_intrinsic_value
+                    WHERE symbol = :symbol
                 """), {
                     'symbol': score_data['symbol'],
                     'sector': score_data['sector'],
@@ -616,11 +612,37 @@ class YFinanceUndervaluationCalculator:
                     'risk_score': score_data['risk_score'],
                     'data_quality': score_data['data_quality'],
                     'price': score_data['price'],
-                    'market_cap': score_data['market_cap'],
-                    'dcf_value': score_data.get('dcf_value'),
-                    'ddm_value': score_data.get('ddm_value'),
-                    'final_intrinsic_value': score_data.get('final_intrinsic_value'),
+                    'mktcap': score_data['market_cap'],
+                    'dcf_value': self._convert_numpy_types(score_data.get('dcf_value')),
+                    'ddm_value': self._convert_numpy_types(score_data.get('ddm_value')),
+                    'final_intrinsic_value': self._convert_numpy_types(score_data.get('final_intrinsic_value')),
                 })
+                
+                # If no rows were updated, insert new record
+                if result.rowcount == 0:
+                    conn.execute(text("""
+                        INSERT INTO undervaluation_scores 
+                        (symbol, sector, undervaluation_score, valuation_score, quality_score, 
+                         strength_score, risk_score, data_quality, price, mktcap, updated_at,
+                         dcf_value, ddm_value, final_intrinsic_value)
+                        VALUES (:symbol, :sector, :undervaluation_score, :valuation_score, :quality_score, 
+                                :strength_score, :risk_score, :data_quality, :price, :mktcap, CURRENT_TIMESTAMP,
+                                :dcf_value, :ddm_value, :final_intrinsic_value)
+                    """), {
+                        'symbol': score_data['symbol'],
+                        'sector': score_data['sector'],
+                        'undervaluation_score': score_data['undervaluation_score'],
+                        'valuation_score': score_data['valuation_score'],
+                        'quality_score': score_data['quality_score'],
+                        'strength_score': score_data['strength_score'],
+                        'risk_score': score_data['risk_score'],
+                        'data_quality': score_data['data_quality'],
+                        'price': score_data['price'],
+                        'mktcap': score_data['market_cap'],
+                        'dcf_value': self._convert_numpy_types(score_data.get('dcf_value')),
+                        'ddm_value': self._convert_numpy_types(score_data.get('ddm_value')),
+                        'final_intrinsic_value': self._convert_numpy_types(score_data.get('final_intrinsic_value')),
+                    })
                 conn.commit()
             
             logger.debug(f"Saved undervaluation score for {score_data['symbol']}")
@@ -866,52 +888,80 @@ class YFinanceUndervaluationCalculator:
             logger.error(f"Error calculating scorecard for {data.get('symbol', 'unknown')}: {e}")
             return None
     
+    def _convert_numpy_types(self, value):
+        """Convert numpy types to Python native types for database compatibility"""
+        if isinstance(value, np.floating):
+            return float(value)
+        elif isinstance(value, np.integer):
+            return int(value)
+        elif hasattr(value, 'item'):  # Other numpy scalars
+            return value.item()
+        return value
+
     def save_batch_undervaluation_scores(self, batch_scores: List[Dict]):
         """Save multiple undervaluation scores in a single transaction"""
         try:
             with self.db.engine.connect() as conn:
-                # Use bulk insert for better performance
-                conn.execute(text("""
-                    INSERT INTO undervaluation_scores 
-                    (symbol, sector, undervaluation_score, valuation_score, quality_score, 
-                     strength_score, risk_score, data_quality, price, mktcap, updated_at,
-                     dcf_value, ddm_value, final_intrinsic_value)
-                    VALUES 
-                    """ + ",".join([
-                        "(:symbol_{i}, :sector_{i}, :undervaluation_score_{i}, :valuation_score_{i}, :quality_score_{i}, "
-                        ":strength_score_{i}, :risk_score_{i}, :data_quality_{i}, :price_{i}, :mktcap_{i}, CURRENT_TIMESTAMP, "
-                        ":dcf_value_{i}, :ddm_value_{i}, :final_intrinsic_value_{i})".format(i=i)
-                        for i in range(len(batch_scores))
-                    ]) + """
-                    ON CONFLICT (symbol) DO UPDATE SET
-                    sector = EXCLUDED.sector,
-                    undervaluation_score = EXCLUDED.undervaluation_score,
-                    valuation_score = EXCLUDED.valuation_score,
-                    quality_score = EXCLUDED.quality_score,
-                    strength_score = EXCLUDED.strength_score,
-                    risk_score = EXCLUDED.risk_score,
-                    data_quality = EXCLUDED.data_quality,
-                    price = EXCLUDED.price,
-                    mktcap = EXCLUDED.mktcap,
-                    updated_at = CURRENT_TIMESTAMP,
-                    dcf_value = EXCLUDED.dcf_value,
-                    ddm_value = EXCLUDED.ddm_value,
-                    final_intrinsic_value = EXCLUDED.final_intrinsic_value
-                """), {
-                    **{f'symbol_{i}': score['symbol'] for i, score in enumerate(batch_scores)},
-                    **{f'sector_{i}': score['sector'] for i, score in enumerate(batch_scores)},
-                    **{f'undervaluation_score_{i}': score['undervaluation_score'] for i, score in enumerate(batch_scores)},
-                    **{f'valuation_score_{i}': score['valuation_score'] for i, score in enumerate(batch_scores)},
-                    **{f'quality_score_{i}': score['quality_score'] for i, score in enumerate(batch_scores)},
-                    **{f'strength_score_{i}': score['strength_score'] for i, score in enumerate(batch_scores)},
-                    **{f'risk_score_{i}': score['risk_score'] for i, score in enumerate(batch_scores)},
-                    **{f'data_quality_{i}': score['data_quality'] for i, score in enumerate(batch_scores)},
-                    **{f'price_{i}': score['price'] for i, score in enumerate(batch_scores)},
-                    **{f'mktcap_{i}': score['market_cap'] for i, score in enumerate(batch_scores)},
-                    **{f'dcf_value_{i}': score.get('dcf_value') for i, score in enumerate(batch_scores)},
-                    **{f'ddm_value_{i}': score.get('ddm_value') for i, score in enumerate(batch_scores)},
-                    **{f'final_intrinsic_value_{i}': score.get('final_intrinsic_value') for i, score in enumerate(batch_scores)},
-                })
+                # Use individual INSERT statements since there's no unique constraint
+                for score in batch_scores:
+                    # First, try to update existing record
+                    result = conn.execute(text("""
+                        UPDATE undervaluation_scores 
+                        SET sector = :sector,
+                            undervaluation_score = :undervaluation_score,
+                            valuation_score = :valuation_score,
+                            quality_score = :quality_score,
+                            strength_score = :strength_score,
+                            risk_score = :risk_score,
+                            data_quality = :data_quality,
+                            price = :price,
+                            mktcap = :mktcap,
+                            updated_at = CURRENT_TIMESTAMP,
+                            dcf_value = :dcf_value,
+                            ddm_value = :ddm_value,
+                            final_intrinsic_value = :final_intrinsic_value
+                        WHERE symbol = :symbol
+                    """), {
+                        'symbol': score['symbol'],
+                        'sector': score['sector'],
+                        'undervaluation_score': score['undervaluation_score'],
+                        'valuation_score': score['valuation_score'],
+                        'quality_score': score['quality_score'],
+                        'strength_score': score['strength_score'],
+                        'risk_score': score['risk_score'],
+                        'data_quality': score['data_quality'],
+                        'price': score['price'],
+                        'mktcap': score['market_cap'],
+                        'dcf_value': self._convert_numpy_types(score.get('dcf_value')),
+                        'ddm_value': self._convert_numpy_types(score.get('ddm_value')),
+                        'final_intrinsic_value': self._convert_numpy_types(score.get('final_intrinsic_value')),
+                    })
+                    
+                    # If no rows were updated, insert new record
+                    if result.rowcount == 0:
+                        conn.execute(text("""
+                            INSERT INTO undervaluation_scores 
+                            (symbol, sector, undervaluation_score, valuation_score, quality_score, 
+                             strength_score, risk_score, data_quality, price, mktcap, updated_at,
+                             dcf_value, ddm_value, final_intrinsic_value)
+                            VALUES (:symbol, :sector, :undervaluation_score, :valuation_score, :quality_score, 
+                                    :strength_score, :risk_score, :data_quality, :price, :mktcap, CURRENT_TIMESTAMP,
+                                    :dcf_value, :ddm_value, :final_intrinsic_value)
+                        """), {
+                            'symbol': score['symbol'],
+                            'sector': score['sector'],
+                            'undervaluation_score': score['undervaluation_score'],
+                            'valuation_score': score['valuation_score'],
+                            'quality_score': score['quality_score'],
+                            'strength_score': score['strength_score'],
+                            'risk_score': score['risk_score'],
+                            'data_quality': score['data_quality'],
+                            'price': score['price'],
+                            'mktcap': score['market_cap'],
+                            'dcf_value': self._convert_numpy_types(score.get('dcf_value')),
+                            'ddm_value': self._convert_numpy_types(score.get('ddm_value')),
+                            'final_intrinsic_value': self._convert_numpy_types(score.get('final_intrinsic_value')),
+                        })
                 conn.commit()
                 
         except Exception as e:
