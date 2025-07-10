@@ -268,7 +268,10 @@ class YFinanceUndervaluationCalculator:
                 if pd.isna(fcf_growth_rate) or fcf_growth_rate <= 0:
                     fcf_growth_rate = 0.03 # Conservative growth
 
-                last_fcf = float(historical_fcf[0].free_cash_flow)
+                last_fcf_value = historical_fcf[0].free_cash_flow
+                if last_fcf_value is None:
+                    return None
+                last_fcf = float(last_fcf_value)
                 projected_fcf = [last_fcf * (1 + fcf_growth_rate) ** i for i in range(1, 6)]
 
                 # 4. Calculate Terminal Value
@@ -288,7 +291,10 @@ class YFinanceUndervaluationCalculator:
                 if not shares_outstanding or not shares_outstanding.shares_outstanding:
                     return None
 
-                intrinsic_value_per_share = equity_value / float(shares_outstanding.shares_outstanding)
+                shares_value = shares_outstanding.shares_outstanding
+                if shares_value is None:
+                    return None
+                intrinsic_value_per_share = equity_value / float(shares_value)
                 return intrinsic_value_per_share
 
         except Exception as e:
@@ -588,6 +594,7 @@ class YFinanceUndervaluationCalculator:
             
             # For relative value, we need to estimate a value from the score.
             # This is a simplification. A better approach would be to use peer multiples.
+            relative_value = None
             if relative_score_data.get('undervaluation_score'):
                 # This is a rough estimation and should be improved.
                 # For now, we assume the score reflects a % discount/premium to the current price.
@@ -595,7 +602,15 @@ class YFinanceUndervaluationCalculator:
                 values.append(relative_value * weights['relative'])
 
             if values:
-                final_intrinsic_value = sum(values) / sum(weights[k] for k, v in {'dcf': dcf_value, 'ddm': ddm_value, 'relative': relative_value}.items() if v is not None)
+                value_weights = {}
+                if dcf_value is not None:
+                    value_weights['dcf'] = dcf_value
+                if ddm_value is not None:
+                    value_weights['ddm'] = ddm_value
+                if relative_value is not None:
+                    value_weights['relative'] = relative_value
+                
+                final_intrinsic_value = sum(values) / sum(weights[k] for k in value_weights.keys())
 
             # Combine all data
             scorecard = {
@@ -897,12 +912,21 @@ class YFinanceUndervaluationCalculator:
             if ddm_value:
                 values.append(ddm_value * weights['ddm'])
             
+            relative_value = None
             if relative_score_data.get('undervaluation_score'):
                 relative_value = relative_score_data['price'] * (1 + (relative_score_data['undervaluation_score'] - 50) / 100)
                 values.append(relative_value * weights['relative'])
 
             if values:
-                final_intrinsic_value = sum(values) / sum(weights[k] for k, v in {'dcf': dcf_value, 'ddm': ddm_value, 'relative': relative_value}.items() if v is not None)
+                value_weights = {}
+                if dcf_value is not None:
+                    value_weights['dcf'] = dcf_value
+                if ddm_value is not None:
+                    value_weights['ddm'] = ddm_value
+                if relative_value is not None:
+                    value_weights['relative'] = relative_value
+                
+                final_intrinsic_value = sum(values) / sum(weights[k] for k in value_weights.keys())
 
             # Combine all data
             scorecard = {

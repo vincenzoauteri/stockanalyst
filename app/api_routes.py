@@ -678,4 +678,321 @@ def api_internal_error(error):
         'message': 'An unexpected error occurred'
     }), 500
 
-logger.info("API v2 routes initialized with comprehensive endpoints")
+@api_v2.route('/compare')
+def compare_stocks():
+    """
+    Compare multiple stocks side-by-side
+    Query parameters:
+    - symbols: Comma-separated list of stock symbols (e.g., AAPL,MSFT,GOOGL)
+    - format: Response format ('json' or 'table', default: 'json')
+    """
+    try:
+        # Get symbols parameter
+        symbols_param = request.args.get('symbols', '')
+        if not symbols_param:
+            return jsonify({
+                'error': 'symbols parameter is required',
+                'message': 'Provide comma-separated list of symbols (e.g., ?symbols=AAPL,MSFT,GOOGL)'
+            }), 400
+        
+        # Parse and validate symbols
+        symbols = [s.strip().upper() for s in symbols_param.split(',')]
+        symbols = [s for s in symbols if s]  # Remove empty strings
+        
+        if len(symbols) < 2:
+            return jsonify({
+                'error': 'At least 2 symbols required for comparison',
+                'message': 'Provide at least 2 comma-separated symbols'
+            }), 400
+        
+        if len(symbols) > 5:
+            return jsonify({
+                'error': 'Maximum 5 symbols allowed for comparison',
+                'message': 'Provide at most 5 comma-separated symbols'
+            }), 400
+        
+        # Get comparison data
+        service = get_stock_service()
+        comparison_data = service.get_stock_comparison(symbols)
+        
+        if not comparison_data:
+            return jsonify({
+                'error': 'No data found for comparison',
+                'message': 'None of the provided symbols have sufficient data'
+            }), 404
+        
+        # Check requested format
+        format_type = request.args.get('format', 'json').lower()
+        
+        if format_type == 'table':
+            # Return table-friendly format
+            table_data = {
+                'headers': ['Metric'] + [stock['symbol'] for stock in comparison_data],
+                'rows': []
+            }
+            
+            # Define metrics to compare
+            metrics = [
+                ('Symbol', 'symbol'),
+                ('Company Name', 'company_name'),
+                ('Price', 'price'),
+                ('Market Cap', 'market_cap'),
+                ('Sector', 'sector'),
+                ('Industry', 'industry'),
+                ('Undervaluation Score', 'undervaluation_score'),
+                ('Valuation Score', 'valuation_score'),
+                ('Quality Score', 'quality_score'),
+                ('PE Ratio', 'pe_ratio'),
+                ('PB Ratio', 'pb_ratio'),
+                ('PS Ratio', 'ps_ratio'),
+                ('ROE', 'roe'),
+                ('ROA', 'roa'),
+                ('Beta', 'beta'),
+                ('Data Quality', 'data_quality')
+            ]
+            
+            for metric_name, metric_key in metrics:
+                row = [metric_name]
+                for stock in comparison_data:
+                    value = stock.get(metric_key)
+                    if value is None:
+                        row.append('N/A')
+                    elif isinstance(value, (int, float)):
+                        if metric_key in ['price', 'market_cap']:
+                            row.append(f"${value:,.2f}" if value < 1000000 else f"${value/1000000:,.1f}M")
+                        elif metric_key in ['pe_ratio', 'pb_ratio', 'ps_ratio', 'roe', 'roa', 'beta']:
+                            row.append(f"{value:.2f}")
+                        else:
+                            row.append(f"{value:.1f}")
+                    else:
+                        row.append(str(value))
+                table_data['rows'].append(row)
+            
+            return jsonify({
+                'comparison': table_data,
+                'symbols': symbols,
+                'total_compared': len(comparison_data)
+            })
+        else:
+            # Return standard JSON format
+            return jsonify({
+                'comparison': comparison_data,
+                'symbols': symbols,
+                'total_compared': len(comparison_data)
+            })
+    
+    except Exception as e:
+        logger.error(f"Error in stock comparison: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+# Advanced User Alerts System API Endpoints
+
+@api_v2.route('/alerts', methods=['GET'])
+@login_required
+def api_get_user_alerts():
+    """Get all alerts for the current user"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        active_only = request.args.get('active_only', 'true').lower() == 'true'
+        alerts = alerts_service.get_user_alerts(session['user_id'], active_only=active_only)
+        
+        return jsonify({
+            'success': True,
+            'data': alerts,
+            'total': len(alerts)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_user_alerts: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/alerts', methods=['POST'])
+@login_required
+def api_create_alert():
+    """Create a new alert for the current user"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        # Validate required fields
+        required_fields = ['symbol', 'alert_type', 'condition_type']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+        
+        # Validate alert_type
+        valid_alert_types = ['price', 'volume', 'score', 'event']
+        if data['alert_type'] not in valid_alert_types:
+            return jsonify({'success': False, 'error': f'Invalid alert_type. Must be one of: {valid_alert_types}'}), 400
+        
+        # Validate condition_type
+        valid_condition_types = ['above', 'below', 'range', 'change_percent']
+        if data['condition_type'] not in valid_condition_types:
+            return jsonify({'success': False, 'error': f'Invalid condition_type. Must be one of: {valid_condition_types}'}), 400
+        
+        # Create alert
+        alert_id = alerts_service.create_alert(
+            user_id=session['user_id'],
+            symbol=data['symbol'],
+            alert_type=data['alert_type'],
+            condition_type=data['condition_type'],
+            target_value=data.get('target_value'),
+            upper_threshold=data.get('upper_threshold'),
+            lower_threshold=data.get('lower_threshold')
+        )
+        
+        if alert_id:
+            return jsonify({
+                'success': True,
+                'alert_id': alert_id,
+                'message': 'Alert created successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to create alert'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error in api_create_alert: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/alerts/<int:alert_id>', methods=['DELETE'])
+@login_required
+def api_delete_alert(alert_id):
+    """Delete an alert"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        success = alerts_service.delete_alert(alert_id, session['user_id'])
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Alert deleted successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Alert not found or access denied'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error in api_delete_alert: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/alerts/<int:alert_id>/toggle', methods=['POST'])
+@login_required
+def api_toggle_alert(alert_id):
+    """Toggle alert active status"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        success = alerts_service.toggle_alert(alert_id, session['user_id'])
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Alert status toggled successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Alert not found or access denied'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error in api_toggle_alert: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/notifications', methods=['GET'])
+@login_required
+def api_get_notifications():
+    """Get notifications for the current user"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        limit = request.args.get('limit', 50, type=int)
+        
+        notifications = alerts_service.get_user_notifications(
+            session['user_id'], 
+            unread_only=unread_only, 
+            limit=limit
+        )
+        
+        return jsonify({
+            'success': True,
+            'data': notifications,
+            'total': len(notifications)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_notifications: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def api_mark_notification_read(notification_id):
+    """Mark a notification as read"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        success = alerts_service.mark_notification_read(notification_id, session['user_id'])
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Notification marked as read'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Notification not found or access denied'}), 404
+        
+    except Exception as e:
+        logger.error(f"Error in api_mark_notification_read: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/notifications/read-all', methods=['POST'])
+@login_required
+def api_mark_all_notifications_read():
+    """Mark all notifications as read for the current user"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        success = alerts_service.mark_all_notifications_read(session['user_id'])
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'All notifications marked as read'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to mark notifications as read'}), 500
+        
+    except Exception as e:
+        logger.error(f"Error in api_mark_all_notifications_read: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/notifications/unread-count', methods=['GET'])
+@login_required
+def api_get_unread_count():
+    """Get unread notification count for the current user"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        count = alerts_service.get_unread_count(session['user_id'])
+        
+        return jsonify({
+            'success': True,
+            'unread_count': count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_unread_count: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+logger.info("API v2 routes initialized with comprehensive endpoints including alerts system")

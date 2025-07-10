@@ -465,6 +465,18 @@ docker exec sa-web python tests/test_api_integration.py
 
 # Test all API endpoints functionality
 docker exec sa-web python tests/test_api_debug.py
+
+# Enhanced data collection for missing valuation data
+docker exec sa-web python enhanced_data_collector.py
+
+# Check enhanced data collection status
+docker exec sa-web python check_enhanced_data_status.py
+
+# Run batch collection for remaining companies
+docker exec sa-web python run_enhanced_collection.py
+
+# Check for fake/test data contamination
+docker exec sa-web python check_fake_data.py
 ```
 
 ## Known Issues and Solutions

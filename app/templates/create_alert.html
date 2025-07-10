@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Create Alert - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('alerts') }}">My Alerts</a></li>
+                <li class="breadcrumb-item active">Create Alert</li>
+            </ol>
+        </nav>
+        
+        <h1 class="display-5 mb-0">
+            <i class="fas fa-plus-circle text-primary me-2"></i>
+            Create Alert
+        </h1>
+        <p class="lead text-muted">Set up notifications for price movements and score changes</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-bell me-2"></i>Alert Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('create_alert') }}" id="alertForm">
+                    <!-- Stock Symbol -->
+                    <div class="mb-3">
+                        <label for="symbol" class="form-label">Stock Symbol *</label>
+                        <input type="text" class="form-control" id="symbol" name="symbol" required 
+                               placeholder="Enter stock symbol (e.g., AAPL)" style="text-transform: uppercase;">
+                        <div class="form-text">Only S&P 500 stocks are supported</div>
+                    </div>
+
+                    <!-- Alert Type -->
+                    <div class="mb-3">
+                        <label for="alert_type" class="form-label">Alert Type *</label>
+                        <select class="form-select" id="alert_type" name="alert_type" required onchange="updateConditionOptions()">
+                            <option value="">Select alert type...</option>
+                            <option value="price">Price Alert</option>
+                            <option value="score">Undervaluation Score Alert</option>
+                            <option value="volume">Volume Alert</option>
+                        </select>
+                        <div class="form-text">
+                            <strong>Price:</strong> Alerts on stock price movements<br>
+                            <strong>Score:</strong> Alerts on undervaluation score changes<br>
+                            <strong>Volume:</strong> Alerts on trading volume changes
+                        </div>
+                    </div>
+
+                    <!-- Condition Type -->
+                    <div class="mb-3">
+                        <label for="condition_type" class="form-label">Condition *</label>
+                        <select class="form-select" id="condition_type" name="condition_type" required onchange="updateValueFields()">
+                            <option value="">Select condition...</option>
+                            <option value="above">Above target value</option>
+                            <option value="below">Below target value</option>
+                            <option value="range">Outside of range</option>
+                        </select>
+                        <div class="form-text">
+                            <strong>Above:</strong> Trigger when value goes above target<br>
+                            <strong>Below:</strong> Trigger when value goes below target<br>
+                            <strong>Range:</strong> Trigger when value goes outside specified range
+                        </div>
+                    </div>
+
+                    <!-- Target Value (for above/below) -->
+                    <div class="mb-3" id="targetValueGroup" style="display: none;">
+                        <label for="target_value" class="form-label">Target Value</label>
+                        <div class="input-group">
+                            <span class="input-group-text" id="targetValuePrefix">$</span>
+                            <input type="number" class="form-control" id="target_value" name="target_value" 
+                                   step="0.01" placeholder="Enter target value">
+                        </div>
+                        <div class="form-text" id="targetValueHelp">Enter the target value for the alert</div>
+                    </div>
+
+                    <!-- Range Values (for range condition) -->
+                    <div class="mb-3" id="rangeGroup" style="display: none;">
+                        <label class="form-label">Range Values</label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text" id="lowerPrefix">$</span>
+                                    <input type="number" class="form-control" id="lower_threshold" name="lower_threshold" 
+                                           step="0.01" placeholder="Lower bound">
+                                </div>
+                                <div class="form-text">Lower threshold (optional)</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text" id="upperPrefix">$</span>
+                                    <input type="number" class="form-control" id="upper_threshold" name="upper_threshold" 
+                                           step="0.01" placeholder="Upper bound">
+                                </div>
+                                <div class="form-text">Upper threshold (optional)</div>
+                            </div>
+                        </div>
+                        <div class="form-text">Alert triggers when value goes below lower bound or above upper bound</div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('alerts') }}" class="btn btn-outline-secondary me-md-2">
+                            <i class="fas fa-times me-1"></i>Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Create Alert
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- Alert Information -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Alert Information
+                </h6>
+            </div>
+            <div class="card-body">
+                <h6>How alerts work:</h6>
+                <ul class="list-unstyled">
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-1"></i>
+                        Alerts are checked during regular data updates
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-1"></i>
+                        Notifications are created when conditions are met
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-1"></i>
+                        Cooldown periods prevent spam notifications
+                    </li>
+                    <li class="mb-2">
+                        <i class="fas fa-check text-success me-1"></i>
+                        You can toggle alerts on/off anytime
+                    </li>
+                </ul>
+                
+                <h6 class="mt-3">Cooldown periods:</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Price alerts:</strong> 1 hour</li>
+                    <li><strong>Score alerts:</strong> 4 hours</li>
+                    <li><strong>Volume alerts:</strong> 1 hour</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Example Alert -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>Example Alert
+                </h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Price Alert:</strong></p>
+                <p class="text-muted">Alert me when AAPL price goes above $150.00</p>
+                
+                <p class="mb-2 mt-3"><strong>Score Alert:</strong></p>
+                <p class="text-muted">Alert me when MSFT undervaluation score goes below 40</p>
+                
+                <p class="mb-2 mt-3"><strong>Range Alert:</strong></p>
+                <p class="text-muted">Alert me when GOOGL price goes outside $100-$200 range</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateConditionOptions() {
+    const alertType = document.getElementById('alert_type').value;
+    const conditionType = document.getElementById('condition_type');
+    
+    // Reset condition options
+    conditionType.innerHTML = '<option value="">Select condition...</option>';
+    
+    if (alertType) {
+        conditionType.innerHTML += `
+            <option value="above">Above target value</option>
+            <option value="below">Below target value</option>
+            <option value="range">Outside of range</option>
+        `;
+    }
+    
+    updateValueFields();
+}
+
+function updateValueFields() {
+    const alertType = document.getElementById('alert_type').value;
+    const conditionType = document.getElementById('condition_type').value;
+    
+    const targetValueGroup = document.getElementById('targetValueGroup');
+    const rangeGroup = document.getElementById('rangeGroup');
+    const targetValuePrefix = document.getElementById('targetValuePrefix');
+    const lowerPrefix = document.getElementById('lowerPrefix');
+    const upperPrefix = document.getElementById('upperPrefix');
+    const targetValueHelp = document.getElementById('targetValueHelp');
+    
+    // Hide all groups first
+    targetValueGroup.style.display = 'none';
+    rangeGroup.style.display = 'none';
+    
+    if (alertType && conditionType) {
+        // Set prefix based on alert type
+        const prefix = alertType === 'price' ? '$' : (alertType === 'score' ? '' : '');
+        targetValuePrefix.textContent = prefix;
+        lowerPrefix.textContent = prefix;
+        upperPrefix.textContent = prefix;
+        
+        // Set help text
+        let helpText = 'Enter the target value for the alert';
+        if (alertType === 'price') {
+            helpText = 'Enter the target price in dollars';
+        } else if (alertType === 'score') {
+            helpText = 'Enter the target undervaluation score (0-100)';
+        } else if (alertType === 'volume') {
+            helpText = 'Enter the target volume';
+        }
+        targetValueHelp.textContent = helpText;
+        
+        // Show appropriate fields
+        if (conditionType === 'above' || conditionType === 'below') {
+            targetValueGroup.style.display = 'block';
+        } else if (conditionType === 'range') {
+            rangeGroup.style.display = 'block';
+        }
+    }
+}
+
+// Auto-uppercase symbol input
+document.getElementById('symbol').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+
+// Form validation
+document.getElementById('alertForm').addEventListener('submit', function(e) {
+    const conditionType = document.getElementById('condition_type').value;
+    const targetValue = document.getElementById('target_value').value;
+    const lowerThreshold = document.getElementById('lower_threshold').value;
+    const upperThreshold = document.getElementById('upper_threshold').value;
+    
+    if ((conditionType === 'above' || conditionType === 'below') && !targetValue) {
+        e.preventDefault();
+        alert('Please enter a target value for the selected condition.');
+        return;
+    }
+    
+    if (conditionType === 'range' && !lowerThreshold && !upperThreshold) {
+        e.preventDefault();
+        alert('Please enter at least one threshold value for the range condition.');
+        return;
+    }
+});
+</script>
+{% endblock %}

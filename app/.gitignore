@@ -93,7 +93,4 @@ pi_usage.log
 fmp_requests.log
 yahoo_requests.log
 
-# Docker files (preserve from root .gitignore)
-docker-compose.yml
-Dockerfile.app
-Dockerfile.devenv
+app

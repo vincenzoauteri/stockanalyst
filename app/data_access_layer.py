@@ -1060,6 +1060,154 @@ class StockDataService:
         except Exception as e:
             logger.error(f"Error getting comprehensive stock data for {symbol}: {e}")
             return {}
+    
+    def get_stock_comparison(self, symbols: List[str]) -> List[Dict]:
+        """
+        Get comparison data for multiple stocks
+        
+        Args:
+            symbols: List of stock symbols to compare
+            
+        Returns:
+            List of dictionaries containing comparison data for each stock
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                # Build query for multiple symbols
+                placeholders = ', '.join(f':symbol_{i}' for i in range(len(symbols)))
+                params = {f'symbol_{i}': symbol for i, symbol in enumerate(symbols)}
+                
+                query = text(f"""
+                    SELECT 
+                        -- Basic info
+                        s.symbol, s.name as company_name, s.sector, s.headquarters_location,
+                        
+                        -- Company profile
+                        p.price, p.mktcap as market_cap, p.beta, p.industry,
+                        p.companyname, p.currency, p.exchange, p.description,
+                        p.ceo, p.country, p.fulltimeemployees,
+                        
+                        -- Enhanced metrics
+                        p.book_value, p.peg_ratio, p.forward_pe, p.return_on_equity,
+                        p.return_on_assets, p.operating_cashflow, p.free_cashflow,
+                        p.enterprise_value, p.debt_to_equity_ratio,
+                        
+                        -- Undervaluation scores
+                        u.undervaluation_score, u.valuation_score, u.quality_score,
+                        u.strength_score, u.risk_score, u.data_quality,
+                        
+                        -- Latest financial data
+                        i.total_revenue, i.net_income, i.basic_eps, i.diluted_eps,
+                        i.shares_outstanding,
+                        b.total_assets, b.total_equity, b.total_debt,
+                        cf.operating_cash_flow, cf.free_cash_flow
+                        
+                    FROM sp500_constituents s
+                    LEFT JOIN company_profiles p ON s.symbol = p.symbol
+                    LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
+                    LEFT JOIN (
+                        SELECT DISTINCT ON (symbol) symbol, total_revenue, net_income, 
+                               basic_eps, diluted_eps, shares_outstanding
+                        FROM income_statements
+                        ORDER BY symbol, period_ending DESC
+                    ) i ON s.symbol = i.symbol
+                    LEFT JOIN (
+                        SELECT DISTINCT ON (symbol) symbol, total_assets, total_equity, total_debt
+                        FROM balance_sheets
+                        ORDER BY symbol, period_ending DESC
+                    ) b ON s.symbol = b.symbol
+                    LEFT JOIN (
+                        SELECT DISTINCT ON (symbol) symbol, operating_cash_flow, free_cash_flow
+                        FROM cash_flow_statements
+                        ORDER BY symbol, period_ending DESC
+                    ) cf ON s.symbol = cf.symbol
+                    WHERE s.symbol IN ({placeholders})
+                    ORDER BY s.symbol
+                """)
+                
+                result = conn.execute(query, params)
+                rows = result.fetchall()
+                
+                comparison_data = []
+                for row in rows:
+                    # Calculate additional ratios
+                    pe_ratio = None
+                    pb_ratio = None
+                    ps_ratio = None
+                    roe = None
+                    roa = None
+                    
+                    if row.price and row.diluted_eps and row.diluted_eps > 0:
+                        pe_ratio = row.price / row.diluted_eps
+                    
+                    if row.price and row.book_value and row.book_value > 0:
+                        pb_ratio = row.price / row.book_value
+                    elif row.market_cap and row.total_equity and row.total_equity > 0:
+                        pb_ratio = row.market_cap / row.total_equity
+                    
+                    if row.market_cap and row.total_revenue and row.total_revenue > 0:
+                        ps_ratio = row.market_cap / row.total_revenue
+                    
+                    # Use enhanced ROE/ROA if available, otherwise calculate
+                    if row.return_on_equity:
+                        roe = row.return_on_equity
+                    elif row.net_income and row.total_equity and row.total_equity > 0:
+                        roe = row.net_income / row.total_equity
+                    
+                    if row.return_on_assets:
+                        roa = row.return_on_assets
+                    elif row.net_income and row.total_assets and row.total_assets > 0:
+                        roa = row.net_income / row.total_assets
+                    
+                    stock_data = {
+                        'symbol': row.symbol,
+                        'company_name': row.company_name,
+                        'sector': row.sector,
+                        'industry': row.industry,
+                        'headquarters': row.headquarters_location,
+                        'price': row.price,
+                        'market_cap': row.market_cap,
+                        'currency': row.currency,
+                        'exchange': row.exchange,
+                        'description': row.description,
+                        'ceo': row.ceo,
+                        'country': row.country,
+                        'employees': row.fulltimeemployees,
+                        'beta': row.beta,
+                        'book_value': row.book_value,
+                        'peg_ratio': row.peg_ratio,
+                        'forward_pe': row.forward_pe,
+                        'enterprise_value': row.enterprise_value,
+                        'debt_to_equity_ratio': row.debt_to_equity_ratio,
+                        'undervaluation_score': row.undervaluation_score,
+                        'valuation_score': row.valuation_score,
+                        'quality_score': row.quality_score,
+                        'strength_score': row.strength_score,
+                        'risk_score': row.risk_score,
+                        'data_quality': row.data_quality,
+                        'revenue': row.total_revenue,
+                        'net_income': row.net_income,
+                        'eps': row.diluted_eps or row.basic_eps,
+                        'shares_outstanding': row.shares_outstanding,
+                        'total_assets': row.total_assets,
+                        'total_equity': row.total_equity,
+                        'total_debt': row.total_debt,
+                        'operating_cash_flow': row.operating_cash_flow or row.operating_cashflow,
+                        'free_cash_flow': row.free_cash_flow or row.free_cashflow,
+                        'pe_ratio': pe_ratio,
+                        'pb_ratio': pb_ratio,
+                        'ps_ratio': ps_ratio,
+                        'roe': roe,
+                        'roa': roa
+                    }
+                    
+                    comparison_data.append(stock_data)
+                
+                return comparison_data
+                
+        except Exception as e:
+            logger.error(f"Error getting stock comparison data: {e}")
+            return []
 
     def calculate_beta(self, symbol: str, market_symbol: str = 'SPY') -> Optional[float]:
         """

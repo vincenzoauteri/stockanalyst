@@ -47,6 +47,10 @@ class Scheduler:
 
     def __init__(self):
         try:
+            # Validate configuration on startup
+            from unified_config import BaseConfig
+            BaseConfig.validate_and_exit_on_error()
+            
             from database import DatabaseManager
             self.dal = StockDataService()
             self.db_manager = DatabaseManager()

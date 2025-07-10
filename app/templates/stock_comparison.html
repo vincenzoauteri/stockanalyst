@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Comparison - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item active">Stock Comparison</li>
+            </ol>
+        </nav>
+        
+        <h1 class="display-5 mb-0">
+            <i class="fas fa-balance-scale text-primary me-2"></i>
+            Stock Comparison
+        </h1>
+        <p class="lead text-muted">Compare up to 5 stocks side-by-side</p>
+    </div>
+</div>
+
+<!-- Search Form -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-search me-2"></i>Select Stocks to Compare
+                </h5>
+                <form method="GET" action="{{ url_for('stock_comparison') }}">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <input type="text" 
+                                   class="form-control" 
+                                   name="symbols" 
+                                   placeholder="Enter 2-5 stock symbols separated by commas (e.g., AAPL,MSFT,GOOGL)" 
+                                   value="{{ ','.join(symbols) if symbols else '' }}"
+                                   id="symbolsInput">
+                            <small class="form-text text-muted">
+                                Enter stock symbols separated by commas. Maximum 5 stocks.
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search me-1"></i>Compare
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="clearComparison()">
+                                <i class="fas fa-times me-1"></i>Clear
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if symbols and comparison_data %}
+<!-- Comparison Results -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Comparison Results
+                    <span class="badge bg-secondary ms-2">{{ comparison_data|length }} stocks</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th scope="col" style="min-width: 150px;">Metric</th>
+                                {% for stock in comparison_data %}
+                                <th scope="col" class="text-center" style="min-width: 120px;">
+                                    <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" class="text-decoration-none text-white">
+                                        {{ stock.symbol }}
+                                    </a>
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Company Information -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Company Information</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Company Name</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">{{ stock.company_name or 'N/A' }}</td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Sector</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.sector %}
+                                    <span class="badge bg-primary">{{ stock.sector }}</span>
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Industry</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">{{ stock.industry or 'N/A' }}</td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Country</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">{{ stock.country or 'N/A' }}</td>
+                                {% endfor %}
+                            </tr>
+                            
+                            <!-- Market Data -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Market Data</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Current Price</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.price %}
+                                    <span class="fw-bold text-success">${{ "%.2f"|format(stock.price) }}</span>
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Market Cap</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.market_cap %}
+                                    ${{ "%.1f"|format(stock.market_cap / 1000000000) }}B
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Beta</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.beta %}
+                                    {{ "%.2f"|format(stock.beta) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            
+                            <!-- Valuation Metrics -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Valuation Metrics</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Undervaluation Score</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.undervaluation_score %}
+                                    {% if stock.undervaluation_score >= 60 %}
+                                    <span class="badge bg-success fs-6">{{ "%.1f"|format(stock.undervaluation_score) }}</span>
+                                    {% elif stock.undervaluation_score >= 40 %}
+                                    <span class="badge bg-info fs-6">{{ "%.1f"|format(stock.undervaluation_score) }}</span>
+                                    {% else %}
+                                    <span class="badge bg-danger fs-6">{{ "%.1f"|format(stock.undervaluation_score) }}</span>
+                                    {% endif %}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>PE Ratio</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.pe_ratio %}
+                                    {{ "%.2f"|format(stock.pe_ratio) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>PB Ratio</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.pb_ratio %}
+                                    {{ "%.2f"|format(stock.pb_ratio) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>PS Ratio</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.ps_ratio %}
+                                    {{ "%.2f"|format(stock.ps_ratio) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Forward PE</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.forward_pe %}
+                                    {{ "%.2f"|format(stock.forward_pe) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>PEG Ratio</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.peg_ratio %}
+                                    {{ "%.2f"|format(stock.peg_ratio) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            
+                            <!-- Profitability -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Profitability</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Return on Equity (ROE)</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.roe %}
+                                    {{ "%.2f"|format(stock.roe * 100) }}%
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Return on Assets (ROA)</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.roa %}
+                                    {{ "%.2f"|format(stock.roa * 100) }}%
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Net Income</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.net_income %}
+                                    ${{ "%.1f"|format(stock.net_income / 1000000000) }}B
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Revenue</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.revenue %}
+                                    ${{ "%.1f"|format(stock.revenue / 1000000000) }}B
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            
+                            <!-- Financial Strength -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Financial Strength</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Total Debt</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.total_debt %}
+                                    ${{ "%.1f"|format(stock.total_debt / 1000000000) }}B
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Debt-to-Equity Ratio</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.debt_to_equity_ratio %}
+                                    {{ "%.2f"|format(stock.debt_to_equity_ratio) }}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            <tr>
+                                <td><strong>Free Cash Flow</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.free_cash_flow %}
+                                    ${{ "%.1f"|format(stock.free_cash_flow / 1000000000) }}B
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            
+                            <!-- Data Quality -->
+                            <tr class="table-secondary">
+                                <td colspan="{{ comparison_data|length + 1 }}"><strong>Data Quality</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Analysis Quality</strong></td>
+                                {% for stock in comparison_data %}
+                                <td class="text-center">
+                                    {% if stock.data_quality %}
+                                    {% if stock.data_quality == 'high' %}
+                                    <span class="badge bg-success">High</span>
+                                    {% elif stock.data_quality == 'medium' %}
+                                    <span class="badge bg-info">Medium</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">Low</span>
+                                    {% endif %}
+                                    {% else %}N/A{% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-bolt me-2"></i>Quick Actions
+                </h5>
+                <div class="row">
+                    {% for stock in comparison_data %}
+                    <div class="col-md-{{ 12 // comparison_data|length if comparison_data|length <= 4 else 3 }}">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('stock_detail', symbol=stock.symbol) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-chart-line me-1"></i>{{ stock.symbol }} Details
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif symbols %}
+<!-- No Results -->
+<div class="row">
+    <div class="col-12">
+        <div class="alert alert-warning" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>No data found</strong> for the provided symbols: {{ ','.join(symbols) }}
+            <br>
+            <small>Please check the symbols and try again. Only S&P 500 stocks are available for comparison.</small>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function clearComparison() {
+    document.getElementById('symbolsInput').value = '';
+    window.location.href = '{{ url_for("stock_comparison") }}';
+}
+
+// Auto-uppercase input
+document.getElementById('symbolsInput').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+});
+</script>
+{% endblock %}

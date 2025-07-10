@@ -11,7 +11,7 @@ class BaseConfig:
     """Base configuration with all settings"""
     
     # Application Configuration
-    APP_VERSION = "0.0.23"
+    APP_VERSION = "0.0.25"
     
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')
@@ -27,7 +27,7 @@ class BaseConfig:
     POSTGRES_PORT = os.getenv('POSTGRES_PORT', '5432')
     POSTGRES_DB = os.getenv('POSTGRES_DB', 'stockanalyst')
     POSTGRES_USER = os.getenv('POSTGRES_USER', 'stockanalyst')
-    POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'defaultpassword')
+    POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')  # No default - must be set explicitly
     
     # Basic Scheduling Configuration
     DAILY_UPDATE_TIME = time(6, 0)  # 6:00 AM
@@ -178,7 +178,7 @@ class BaseConfig:
     
     # Flask/Web Application Configuration
     DEBUG = False
-    SECRET_KEY = os.getenv('SECRET_KEY', 'change-me-in-production')
+    SECRET_KEY = os.getenv('SECRET_KEY')  # No default - must be set explicitly
     
     # Redis Configuration (for caching)
     REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
@@ -231,9 +231,28 @@ class BaseConfig:
         """Validate configuration settings"""
         errors = []
         
+        # Check required API keys
         if not cls.FMP_API_KEY:
             errors.append("FMP_API_KEY environment variable is required")
         
+        # Check critical security settings for production
+        env = os.getenv('FLASK_ENV', os.getenv('ENV', 'production')).lower()
+        if env in ['production', 'prod']:
+            if not cls.SECRET_KEY:
+                errors.append("SECRET_KEY environment variable is required for production")
+            elif cls.SECRET_KEY in ['change-me-in-production', 'dev-secret-key', 'production-secret-key-change-me']:
+                errors.append("SECRET_KEY must be changed from default value in production")
+            elif len(cls.SECRET_KEY) < 32:
+                errors.append("SECRET_KEY must be at least 32 characters long in production")
+                
+            if not cls.POSTGRES_PASSWORD:
+                errors.append("POSTGRES_PASSWORD environment variable is required for production")
+            elif cls.POSTGRES_PASSWORD in ['defaultpassword', 'password', '123456']:
+                errors.append("POSTGRES_PASSWORD must be changed from default value in production")
+            elif len(cls.POSTGRES_PASSWORD) < 12:
+                errors.append("POSTGRES_PASSWORD must be at least 12 characters long in production")
+        
+        # Validate budget allocations
         if sum(cls.DAILY_REQUEST_BUDGET.values()) > cls.FMP_FREE_TIER_DAILY_LIMIT:
             errors.append(f"Daily request budget ({sum(cls.DAILY_REQUEST_BUDGET.values())}) "
                          f"exceeds API limit ({cls.FMP_FREE_TIER_DAILY_LIMIT})")
@@ -250,6 +269,19 @@ class BaseConfig:
             errors.append(f"Catchup budget allocation must sum to 1.0, got {catchup_total}")
         
         return errors
+    
+    @classmethod
+    def validate_and_exit_on_error(cls):
+        """Validate configuration and exit if critical errors found"""
+        errors = cls.validate_config()
+        if errors:
+            import sys
+            print("CRITICAL CONFIGURATION ERRORS:", file=sys.stderr)
+            for error in errors:
+                print(f"  - {error}", file=sys.stderr)
+            print("\nApplication cannot start with these configuration errors.", file=sys.stderr)
+            print("Please set the required environment variables and restart.", file=sys.stderr)
+            sys.exit(1)
 
 
 class DevelopmentConfig(BaseConfig):
@@ -293,7 +325,7 @@ class ProductionConfig(BaseConfig):
     """Production-specific configuration"""
     DEBUG = False
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    SECRET_KEY = os.getenv('SECRET_KEY', 'production-secret-key-change-me')
+    # SECRET_KEY inherited from BaseConfig - no default, must be set explicitly
     # Use full API budget and enhanced features in production
 
 

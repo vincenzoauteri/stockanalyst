@@ -45,6 +45,10 @@ class WebAppLauncher:
         """Check and report on the application environment"""
         self.logger.info("🔧 Environment Check:")
         
+        # Validate configuration and exit if critical errors
+        from unified_config import BaseConfig
+        BaseConfig.validate_and_exit_on_error()
+        
         db_path = os.getenv('DATABASE_PATH', 'stock_analysis.db')
         if os.path.exists(db_path):
             self.logger.info(f"   ✅ Database found at {db_path}")

@@ -348,6 +348,79 @@ class DatabaseManager:
             logger.debug("Performance indexes created successfully")
         except Exception as e:
             logger.warning(f"Failed to commit index creation: {e}")
+        
+        # Create alerts system tables
+        self._create_alerts_tables(conn)
+    
+    def _create_alerts_tables(self, conn):
+        """Create tables for the user alerts system"""
+        logger.info("Creating alerts system tables")
+        
+        try:
+            # User alerts table
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS user_alerts (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    alert_type TEXT NOT NULL,
+                    condition_type TEXT NOT NULL,
+                    target_value REAL,
+                    upper_threshold REAL,
+                    lower_threshold REAL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_triggered_at TIMESTAMP,
+                    trigger_count INTEGER DEFAULT 0,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    CONSTRAINT check_alert_type CHECK (alert_type IN ('price', 'volume', 'score', 'event')),
+                    CONSTRAINT check_condition_type CHECK (condition_type IN ('above', 'below', 'range', 'change_percent'))
+                )
+            """))
+            
+            # Alert notifications table
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS alert_notifications (
+                    id SERIAL PRIMARY KEY,
+                    alert_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    symbol TEXT NOT NULL,
+                    alert_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    current_value REAL,
+                    target_value REAL,
+                    triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_read BOOLEAN DEFAULT FALSE,
+                    notification_method TEXT DEFAULT 'in_app',
+                    FOREIGN KEY (alert_id) REFERENCES user_alerts(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """))
+            
+            # Create indexes for alerts
+            alert_indexes = [
+                "CREATE INDEX IF NOT EXISTS idx_user_alerts_user_id ON user_alerts(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_user_alerts_symbol ON user_alerts(symbol)",
+                "CREATE INDEX IF NOT EXISTS idx_user_alerts_active ON user_alerts(is_active)",
+                "CREATE INDEX IF NOT EXISTS idx_alert_notifications_user_id ON alert_notifications(user_id)",
+                "CREATE INDEX IF NOT EXISTS idx_alert_notifications_read ON alert_notifications(is_read)",
+                "CREATE INDEX IF NOT EXISTS idx_alert_notifications_triggered_at ON alert_notifications(triggered_at)",
+            ]
+            
+            for index_sql in alert_indexes:
+                try:
+                    conn.execute(text(index_sql))
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        logger.warning(f"Alert index creation failed: {e}")
+            
+            conn.commit()
+            logger.info("Alerts system tables created successfully")
+            
+        except Exception as e:
+            logger.error(f"Error creating alerts tables: {e}")
+            conn.rollback()
     
     @log_function_call
     def create_indexes_safe(self):

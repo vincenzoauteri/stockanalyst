@@ -98,7 +98,7 @@ class UndervaluationQueueProcessor:
             logger.info(f"Recalculating undervaluation score for {symbol}")
             
             # Calculate new score
-            score_data = self.calculator.calculate_undervaluation_score(symbol)
+            score_data = self.calculator.calculate_relative_score(symbol)
             
             if score_data:
                 # Save updated score

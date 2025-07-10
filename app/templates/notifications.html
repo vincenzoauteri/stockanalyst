@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item active">Notifications</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="display-5 mb-0">
+                    <i class="fas fa-inbox text-primary me-2"></i>
+                    Notifications
+                    {% if unread_count > 0 %}
+                        <span class="badge bg-warning ms-2">{{ unread_count }} unread</span>
+                    {% endif %}
+                </h1>
+                <p class="lead text-muted">View your alert notifications</p>
+            </div>
+            <div>
+                {% if unread_count > 0 %}
+                <button class="btn btn-outline-primary" onclick="markAllRead()">
+                    <i class="fas fa-check-double me-1"></i>Mark All Read
+                </button>
+                {% endif %}
+                <a href="{{ url_for('alerts') }}" class="btn btn-primary ms-2">
+                    <i class="fas fa-bell me-1"></i>Manage Alerts
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Notifications List -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list me-2"></i>All Notifications
+                    <span class="badge bg-secondary ms-2">{{ notifications|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if notifications %}
+                <div class="list-group">
+                    {% for notification in notifications %}
+                    <div class="list-group-item{% if not notification.is_read %} list-group-item-warning{% endif %}" 
+                         id="notification-{{ notification.id }}">
+                        <div class="d-flex w-100 justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-2">
+                                    <h6 class="mb-0 me-3">
+                                        <i class="fas fa-{{ get_alert_icon(notification.alert_type) }} me-1"></i>
+                                        <a href="{{ url_for('stock_detail', symbol=notification.symbol) }}" 
+                                           class="text-decoration-none">{{ notification.symbol }}</a>
+                                        - {{ notification.alert_type.title() }} Alert
+                                    </h6>
+                                    {% if not notification.is_read %}
+                                    <span class="badge bg-warning">New</span>
+                                    {% endif %}
+                                </div>
+                                <p class="mb-1">{{ notification.message }}</p>
+                                <div class="d-flex align-items-center">
+                                    <small class="text-muted me-3">
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ notification.triggered_at[:16] if notification.triggered_at else 'Unknown' }}
+                                    </small>
+                                    {% if notification.current_value and notification.target_value %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-arrow-right me-1"></i>
+                                        Current: 
+                                        {% if notification.alert_type == 'price' %}
+                                            ${{ "%.2f"|format(notification.current_value) }}
+                                        {% else %}
+                                            {{ "%.2f"|format(notification.current_value) }}
+                                        {% endif %}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                {% if not notification.is_read %}
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        onclick="markAsRead({{ notification.id }})">
+                                    <i class="fas fa-check me-1"></i>Mark Read
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Load More Button -->
+                {% if notifications|length >= 50 %}
+                <div class="text-center mt-3">
+                    <button class="btn btn-outline-primary" onclick="loadMoreNotifications()">
+                        <i class="fas fa-plus me-1"></i>Load More
+                    </button>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">No notifications yet</h4>
+                    <p class="text-muted">Notifications will appear here when your alerts are triggered</p>
+                    <a href="{{ url_for('create_alert') }}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Create Your First Alert
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Options -->
+{% if notifications %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">
+                    <i class="fas fa-filter me-2"></i>Filter Options
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="alertTypeFilter" class="form-label">Alert Type</label>
+                            <select class="form-select" id="alertTypeFilter" onchange="filterNotifications()">
+                                <option value="">All Types</option>
+                                <option value="price">Price Alerts</option>
+                                <option value="score">Score Alerts</option>
+                                <option value="volume">Volume Alerts</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="statusFilter" class="form-label">Status</label>
+                            <select class="form-select" id="statusFilter" onchange="filterNotifications()">
+                                <option value="">All Status</option>
+                                <option value="unread">Unread Only</option>
+                                <option value="read">Read Only</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="symbolFilter" class="form-label">Symbol</label>
+                            <input type="text" class="form-control" id="symbolFilter" 
+                                   placeholder="Filter by symbol" onkeyup="filterNotifications()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function markAsRead(notificationId) {
+    fetch(`/api/v2/notifications/${notificationId}/read`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const notification = document.getElementById(`notification-${notificationId}`);
+            notification.classList.remove('list-group-item-warning');
+            
+            // Remove the "New" badge and "Mark Read" button
+            const badge = notification.querySelector('.badge-warning');
+            if (badge) badge.remove();
+            
+            const button = notification.querySelector('.btn-outline-primary');
+            if (button) button.remove();
+            
+            // Update unread count in page title
+            updateUnreadCount();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error marking notification as read');
+    });
+}
+
+function markAllRead() {
+    if (confirm('Mark all notifications as read?')) {
+        fetch('/api/v2/notifications/read-all', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error marking all notifications as read');
+        });
+    }
+}
+
+function updateUnreadCount() {
+    fetch('/api/v2/notifications/unread-count')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const unreadCount = data.unread_count;
+            // Update page title badge
+            const titleBadge = document.querySelector('h1 .badge');
+            if (unreadCount > 0) {
+                if (titleBadge) {
+                    titleBadge.textContent = `${unreadCount} unread`;
+                } else {
+                    document.querySelector('h1').innerHTML += 
+                        `<span class="badge bg-warning ms-2">${unreadCount} unread</span>`;
+                }
+            } else {
+                if (titleBadge) titleBadge.remove();
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error updating unread count:', error);
+    });
+}
+
+function filterNotifications() {
+    const alertTypeFilter = document.getElementById('alertTypeFilter').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value.toLowerCase();
+    const symbolFilter = document.getElementById('symbolFilter').value.toLowerCase();
+    
+    const notifications = document.querySelectorAll('.list-group-item');
+    
+    notifications.forEach(notification => {
+        const alertType = notification.querySelector('h6').textContent.toLowerCase();
+        const isUnread = notification.classList.contains('list-group-item-warning');
+        const symbol = notification.querySelector('a').textContent.toLowerCase();
+        
+        let showNotification = true;
+        
+        // Filter by alert type
+        if (alertTypeFilter && !alertType.includes(alertTypeFilter)) {
+            showNotification = false;
+        }
+        
+        // Filter by status
+        if (statusFilter === 'unread' && !isUnread) {
+            showNotification = false;
+        } else if (statusFilter === 'read' && isUnread) {
+            showNotification = false;
+        }
+        
+        // Filter by symbol
+        if (symbolFilter && !symbol.includes(symbolFilter)) {
+            showNotification = false;
+        }
+        
+        notification.style.display = showNotification ? 'block' : 'none';
+    });
+}
+
+function loadMoreNotifications() {
+    // This would typically make an AJAX request to load more notifications
+    // For now, we'll just show a message
+    alert('Load more functionality would be implemented here');
+}
+</script>
+{% endblock %}
+
+{% macro get_alert_icon(alert_type) %}
+{% if alert_type == 'price' %}dollar-sign{% elif alert_type == 'score' %}star{% elif alert_type == 'volume' %}chart-bar{% else %}bell{% endif %}
+{% endmacro %}

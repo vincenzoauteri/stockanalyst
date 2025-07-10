@@ -302,6 +302,31 @@ def sector_detail(sector_name):
         logger.error(f"Error in sector_detail route for {sector_name}: {e}")
         return render_template('error.html', error=str(e))
 
+@app.route('/compare')
+def stock_comparison():
+    """Stock comparison page"""
+    try:
+        # Get symbols from query parameters
+        symbols_param = request.args.get('symbols', '')
+        symbols = []
+        comparison_data = []
+        
+        if symbols_param:
+            symbols = [s.strip().upper() for s in symbols_param.split(',')]
+            symbols = [s for s in symbols if s]  # Remove empty strings
+            
+            if len(symbols) >= 2 and len(symbols) <= 5:
+                service = get_stock_service()
+                comparison_data = service.get_stock_comparison(symbols)
+        
+        return render_template('stock_comparison.html', 
+                             symbols=symbols, 
+                             comparison_data=comparison_data)
+        
+    except Exception as e:
+        logger.error(f"Error in stock comparison page: {e}")
+        return render_template('error.html', error=str(e))
+
 @app.route('/sectors')
 def sectors_overview():
     """Sectors overview page with aggregated analysis"""
@@ -1188,6 +1213,122 @@ def format_currency(value):
             return f"${value:.2f}"
     except (ValueError, TypeError):
         return '-'
+
+# Advanced User Alerts System Routes
+
+@app.route('/alerts')
+@login_required
+def alerts():
+    """User alerts management page"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        # Get user alerts
+        user_alerts = alerts_service.get_user_alerts(session['user_id'])
+        
+        # Get recent notifications
+        recent_notifications = alerts_service.get_user_notifications(session['user_id'], limit=10)
+        
+        # Get unread count
+        unread_count = alerts_service.get_unread_count(session['user_id'])
+        
+        return render_template('alerts.html',
+                             alerts=user_alerts,
+                             notifications=recent_notifications,
+                             unread_count=unread_count)
+        
+    except Exception as e:
+        logger.error(f"Error in alerts route: {e}")
+        flash('Error loading alerts', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/alerts/create', methods=['GET', 'POST'])
+@login_required
+def create_alert():
+    """Create new alert page"""
+    if request.method == 'POST':
+        try:
+            from alerts_service import AlertsService
+            alerts_service = AlertsService()
+            
+            # Get form data
+            symbol = request.form.get('symbol', '').strip().upper()
+            alert_type = request.form.get('alert_type', '').strip()
+            condition_type = request.form.get('condition_type', '').strip()
+            target_value = request.form.get('target_value', '').strip()
+            upper_threshold = request.form.get('upper_threshold', '').strip()
+            lower_threshold = request.form.get('lower_threshold', '').strip()
+            
+            # Validate required fields
+            if not symbol or not alert_type or not condition_type:
+                flash('Symbol, alert type, and condition type are required', 'error')
+                return redirect(url_for('create_alert'))
+            
+            # Verify stock exists
+            service = get_stock_service()
+            stock_info = service.get_stock_basic_info(symbol)
+            if not stock_info:
+                flash(f'Stock symbol {symbol} not found in our database', 'error')
+                return redirect(url_for('create_alert'))
+            
+            # Parse numeric values
+            target_val = float(target_value) if target_value else None
+            upper_val = float(upper_threshold) if upper_threshold else None
+            lower_val = float(lower_threshold) if lower_threshold else None
+            
+            # Create alert
+            alert_id = alerts_service.create_alert(
+                user_id=session['user_id'],
+                symbol=symbol,
+                alert_type=alert_type,
+                condition_type=condition_type,
+                target_value=target_val,
+                upper_threshold=upper_val,
+                lower_threshold=lower_val
+            )
+            
+            if alert_id:
+                flash(f'Alert created successfully for {symbol}', 'success')
+                return redirect(url_for('alerts'))
+            else:
+                flash('Failed to create alert', 'error')
+                return redirect(url_for('create_alert'))
+                
+        except ValueError as e:
+            flash('Invalid numeric value provided', 'error')
+            return redirect(url_for('create_alert'))
+        except Exception as e:
+            logger.error(f"Error creating alert: {e}")
+            flash('Error creating alert', 'error')
+            return redirect(url_for('create_alert'))
+    
+    # GET request - show create form
+    return render_template('create_alert.html')
+
+@app.route('/notifications')
+@login_required
+def notifications():
+    """User notifications page"""
+    try:
+        from alerts_service import AlertsService
+        alerts_service = AlertsService()
+        
+        # Get notifications
+        limit = request.args.get('limit', 50, type=int)
+        user_notifications = alerts_service.get_user_notifications(session['user_id'], limit=limit)
+        
+        # Get unread count
+        unread_count = alerts_service.get_unread_count(session['user_id'])
+        
+        return render_template('notifications.html',
+                             notifications=user_notifications,
+                             unread_count=unread_count)
+        
+    except Exception as e:
+        logger.error(f"Error in notifications route: {e}")
+        flash('Error loading notifications', 'error')
+        return redirect(url_for('index'))
 
 @app.errorhandler(404)
 def not_found_error(error):
