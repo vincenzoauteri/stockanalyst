@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# TEST SYNC: Container sync test comment added
 
 import time
 from fmp_client import FMPClient
