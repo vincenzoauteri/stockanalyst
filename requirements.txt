@@ -16,7 +16,9 @@ beautifulsoup4==4.12.2
     #   yfinance
 blinker==1.9.0
     # via flask
-certifi==2025.6.15
+cachelib==0.9.0
+    # via flask-caching
+certifi==2025.7.9
     # via
     #   curl-cffi
     #   requests
@@ -31,7 +33,13 @@ curl-cffi==0.11.4
 flask==3.0.0
     # via
     #   -r requirements.in
+    #   flask-assets
+    #   flask-caching
     #   flask-restx
+flask-assets==2.1.0
+    # via -r requirements.in
+flask-caching==2.3.0
+    # via -r requirements.in
 flask-restx==1.3.0
     # via -r requirements.in
 frozendict==2.4.6
@@ -64,15 +72,17 @@ numpy==2.3.1
     # via
     #   pandas
     #   yfinance
+orjson==3.10.12
+    # via -r requirements.in
 packaging==25.0
     # via pytest
-pandas==2.3.0
+pandas==2.3.1
     # via
     #   -r requirements.in
     #   yfinance
 pathspec==0.12.1
     # via yamllint
-peewee==3.18.1
+peewee==3.18.2
     # via yfinance
 platformdirs==4.3.8
     # via yfinance
@@ -101,6 +111,8 @@ pytz==2025.2
     #   yfinance
 pyyaml==6.0.2
     # via yamllint
+redis==5.2.0
+    # via -r requirements.in
 referencing==0.36.2
     # via
     #   jsonschema
@@ -133,6 +145,8 @@ tzdata==2025.2
     # via pandas
 urllib3==2.5.0
     # via requests
+webassets==2.0
+    # via flask-assets
 websockets==15.0.1
     # via yfinance
 werkzeug==3.1.3
