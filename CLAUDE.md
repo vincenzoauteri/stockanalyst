@@ -6,7 +6,7 @@ This comprehensive guide provides complete instructions for developers working w
 
 When working on this application:
 
-1. **The application runs in separate Docker containers that restart every time the source code is changed** - Every time you make a change, test in the containers accessing through the exposed services or with docker exec commands
+1. **The application runs in separate Docker containers that restart every time the source code is changed** - Every time you make a change, test in the containers accessing through the exposed services or with docker exec commands. NEVER RESTART THE CONTAINERS
 2. **First make a plan** of what you plan to modify and ask for confirmation
 3. **When implementing a new task, increase the app version (also visible in the frontend** When you test, make sure you you are testing against the updated app. 
 4. **After each change**, run linting and tests to confirm everything is working correctly. Perform regression tests on database, frontend, backend, and API calls
@@ -29,7 +29,7 @@ The application is orchestrated using Docker Compose with multiple specialized c
    - Health checks ensure database readiness before dependent services start
 
 2. **Web Application Container** (`webapp`)
-   - Built from: `Dockerfile.webapp`
+   - Built from: `Dockerfile.main` (target: webapp)
    - Container name: `sa-web`
    - Port: `5000:5000`
    - Multi-stage build with Python 3.12-slim
@@ -38,15 +38,14 @@ The application is orchestrated using Docker Compose with multiple specialized c
    - Runs: `python webapp_launcher.py --mode production`
 
 3. **Scheduler Container** (`scheduler`)
-   - Built from: `Dockerfile.scheduler`
+   - Built from: `Dockerfile.main` (target: scheduler)
    - Container name: `sa-sch`
    - Background task processing and data updates
    - Depends on PostgreSQL health check
    - Runs: `python scheduler.py run-internal`
 
 4. **Development Environment Container** (`devenv`)
-   - Built from: `Dockerfile.devenv`
-   - Container name: `devenv`
+   - Container name: `claude` (externally managed)
    - Development tools: Claude Code, Gemini CLI, Git, Docker client
    - Docker socket access for container management
    - Current directory mounted at `/app`
@@ -63,8 +62,18 @@ The application is orchestrated using Docker Compose with multiple specialized c
 - Webapp accessible at hostname `webapp` from other containers
 
 ### Container Profiles
-- **dev**: postgres, webapp, scheduler, devenv
+- **dev**: postgres, webapp, scheduler, devenv (with hot reloading enabled)
+- **test**: test-postgres, test-webapp, test-scheduler (isolated test environment with hot reloading)
 - **production**: postgres, webapp, scheduler, nginx
+
+### Hot Reloading Configuration
+The application supports automatic code reloading in development:
+
+- **Scheduler Hot Reloading**: Uses `hupper` to monitor Python files and restart the scheduler process when changes are detected
+- **Webapp Hot Reloading**: Uses Flask's debug mode with `use_reloader=True` to automatically restart when code changes
+- **Test Environment**: Both dev and test profiles have hot reloading enabled via `docker-compose.override.yml`
+- **File Changes**: Any modification to Python files in the `/app` directory triggers automatic reloads
+- **No Container Restarts**: The applications reload internally without restarting containers
 
 ## Development Commands
 
@@ -73,26 +82,33 @@ The application is orchestrated using Docker Compose with multiple specialized c
 # Start development environment
 docker compose --profile dev up -d
 
+# Start test environment (RECOMMENDED for testing and development with hot reloading)
+docker compose --profile test up -d
+
 # Start production environment  
 docker compose --profile production up -d
 
-# Stop all containers
-docker compose down
+# Stop containers by profile
+docker compose --profile dev down
+docker compose --profile test down
 
 # View container logs
 docker compose logs -f [service_name]
 
 # Access development container shell (you are here)
-docker exec -it devenv bash
+# Note: Development environment is externally managed
 
-# Access webapp container
-docker exec -it sa-web bash
+# Access webapp containers
+docker exec -it sa-web bash      # dev webapp
+docker exec -it sa-test-web bash # test webapp
 
-# Access scheduler container
-docker exec -it sa-sch bash
+# Access scheduler containers  
+docker exec -it sa-sch bash      # dev scheduler
+docker exec -it sa-test-sch bash # test scheduler
 
-# Access database container
-docker exec -it sa-pg psql -U stockanalyst -d stockanalyst
+# Access database containers
+docker exec -it sa-pg psql -U stockanalyst -d stockanalyst           # dev database
+docker exec -it sa-test-pg psql -U stockanalyst -d stockanalyst_test # test database
 ```
 
 ### Environment Setup
@@ -142,11 +158,11 @@ python webapp_launcher.py --mode development   # Start web interface (developmen
 python webapp_launcher.py --mode production    # Start web interface (production mode)
 python webapp_launcher.py --help               # View all launcher options
 
-# Application Startup
-./startup.sh                                  # Start both scheduler and web application
-python scheduler.py start                     # Start scheduler service
-python scheduler.py status                    # Check scheduler status
-python scheduler.py stop                      # Stop scheduler service
+# Application Startup & Process Management
+./start_services.sh                           # Start both scheduler and web application using supervisord
+./restart_webapp.sh                           # Restart the web application via the manager
+python webapp_manager.py [start|stop|restart|status] # Manage the webapp process
+python scheduler.py [start|stop|restart|status]      # Manage the scheduler process
 
 # Direct Execution
 python main.py                                # Run the main stock analysis application
@@ -155,15 +171,23 @@ python app.py                                 # Run Flask web application direct
 # Testing and Validation
 python run_tests.py                           # Run comprehensive test suite
 python test_new_implementation.py             # Test new financial data features
-python check_records.py                      # Check database record integrity
-python gap_detector.py                       # Detect missing data gaps
+python check_records.py                       # Check database record integrity
+python check_fake_data.py                     # Check for fake/test data in the database
+python gap_detector.py                        # Detect missing data gaps
 
 # Data Management
-python data_fetcher.py                       # Fetch and update stock data
-python daily_updater.py                     # Run daily data updates manually
+python data_fetcher.py                        # Fetch and update stock data
+python daily_updater.py                       # Run daily data updates manually
+python enhanced_data_collector.py             # Collect additional data points for valuation
+python run_enhanced_collection.py             # Run enhanced data collection in batches
+python check_enhanced_data_status.py          # Check coverage of enhanced data
 
 # Undervaluation Queue Processing
 python undervaluation_queue_processor.py    # Process automatic recalculation queue
+
+# Utility Scripts
+python generate_secrets.py                    # Generate new secret keys for .env
+python generate_nginx_config.py               # Generate nginx.conf from template
 
 # Container Testing and Validation (from within devenv container)
 python run_tests.py                          # Run comprehensive test suite
@@ -220,6 +244,20 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 
 **Test Runner (run_tests.py)** - Test execution and validation utilities
 
+**EnhancedProcessManager (process_manager.py)** - Robust utility for managing background processes (like scheduler and webapp) using PIDs and status files.
+
+**WebAppManager (webapp_manager.py)** - A dedicated process manager for the Flask web application, built on top of EnhancedProcessManager.
+
+**Supervisord (supervisord.conf)** - The primary process control system used within the `webapp` container to manage and monitor the webapp and scheduler services.
+
+**AlertsService (alerts_service.py)** - Manages user-defined alerts (e.g., price, score) and handles the creation of notifications.
+
+**CacheUtils (cache_utils.py)** - Provides caching functionality, supporting a Redis backend with a fallback to a simple in-memory cache.
+
+**ServiceRegistry (services.py)** - Implements a singleton pattern to provide a centralized point of access for shared service instances like the database and API clients.
+
+**EnhancedDataCollector (enhanced_data_collector.py)** - A dedicated service to collect additional data points (e.g., beta, book value) from Yahoo Finance to improve the quality of valuation metrics.
+
 ### Key Design Patterns
 - **Containerized Microservices**
 - **Event-Driven Architecture** (Database triggers for automatic recalculation)
@@ -253,10 +291,12 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **user_watchlists** - User-customized stock watchlists
 - **user_portfolios** - Portfolio tracking and management
 - **portfolio_transactions** - Transaction history and portfolio changes
+- **user_alerts** - Stores user-defined alerts for price, volume, or score changes.
+- **alert_notifications** - Logs triggered alerts that have been sent to users.
 
 #### System Tables
 - **data_gaps** - Gap tracking with retry mechanisms for data unavailability handling
-- **undervaluation_recalc_queue** - Queue for automatic undervaluation score recalculation
+- **undervaluation_recalc_queue** - Queue for automatic undervaluation score recalculation. Managed by triggers defined in `create_undervaluation_triggers.sql`.
 
 ### Undervaluation Calculation System
 
@@ -268,8 +308,8 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **High Data Quality**: Achieves "high" quality ratings with complete financial statements
 
 #### Automatic Recalculation System
-- **Database Triggers**: Automatically detect changes in financial data
-- **Queue Processing**: Background processor handles recalculation requests
+- **Database Triggers**: Automatically detect changes in financial data (`create_undervaluation_triggers.sql`).
+- **Queue Processing**: Background processor handles recalculation requests from the `undervaluation_recalc_queue` table.
 - **Real-Time Updates**: Scores update automatically when underlying data changes
 - **Efficient Processing**: Batch processing with configurable intervals
 
@@ -357,165 +397,75 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **Fallback**: Use for data not available via Yahoo Finance
 - **Cost Management**: Prefer Yahoo Finance for routine data collection
 
-## Current Implementation Status
-
-### ✅ Completed Features
-
-#### Core Application (Phase 1)
-- ✅ Stock data collection and storage
-- ✅ Basic undervaluation analysis system
-- ✅ Web interface with stock listings
-- ✅ S&P 500 stock database
-
-#### Advanced Features (Phase 2)
-- ✅ User authentication and session management
-- ✅ Portfolio tracking and transaction management
-- ✅ Comprehensive unit and integration tests
-- ✅ API refactoring and centralized request handling
-- ✅ Interactive charts and enhanced web interface
-- ✅ Swagger/OpenAPI documentation
-- ✅ Detailed logging infrastructure
-
-#### Financial Data & Infrastructure (Phase 3)
-- ✅ Corporate Actions tracking (dividends, stock splits)
-- ✅ Financial Statements (income, balance sheet, cash flow)
-- ✅ Analyst Recommendations tracking
-- ✅ PostgreSQL database migration
-- ✅ Docker containerization with health checks
-- ✅ Enhanced scheduler with gap detection
-- ✅ Catchup strategy with data unavailability handling
-
-#### Advanced Analytics (Phase 4)
-- ✅ Yahoo Finance-based undervaluation calculator
-- ✅ Automatic recalculation system with database triggers
-- ✅ Queue-based processing for score updates
-- ✅ High-quality financial ratio calculations
-- ✅ Real-time score updates when data changes
-
-#### Interactive Data Visualization (Phase 5)
-- ✅ Historical price chart visualization with Chart.js
-- ✅ Interactive period selection (1M, 3M, 6M, 1Y, 2Y, 5Y)
-- ✅ Chart type options (line and area charts)
-- ✅ Volume analysis charts
-- ✅ Real-time price statistics and calculations
-- ✅ API endpoints for chart data with date range filtering
-
-#### Enhanced User Interface (Phase 6)
-- ✅ Application version display (v0.0.15) in frontend header
-- ✅ Streamlined stock listing interface with removed redundant metrics
-- ✅ Fixed undervaluation calculation functionality with proper API integration
-- ✅ Comprehensive Valuation tab for stock detail pages
-- ✅ Detailed valuation scoring system with component breakdowns
-- ✅ Visual progress indicators for undervaluation score components
-- ✅ Color-coded interpretation system for investment guidance
-- ✅ Detailed methodology explanations with proper disclaimers
-
-#### Comprehensive Test Coverage (Phase 7)
-- ✅ Expanded API routes test coverage for all 19 endpoints
-- ✅ Comprehensive error handling and edge case testing
-- ✅ Parameter validation and data serialization tests
-- ✅ Financial data endpoints testing (corporate actions, statements, recommendations)
-- ✅ Authentication and portfolio management endpoint testing
-- ✅ Health check and status monitoring endpoint testing
-- ✅ Created modular test architecture with extended and integration test suites
 
 ### 🔄 Current Status
 
-**Application State**: Fully functional with comprehensive financial data collection, analysis, interactive visualization, enhanced user interface, and extensive test coverage
+**Application State**: Fully functional with comprehensive financial data collection, analysis, interactive visualization, enhanced user interface, and complete test coverage
+**Application Version**: 0.0.26 (defined in unified_config.py:14)
 **Data Coverage**: 500+ S&P 500 companies with profile data, financial statements, and corporate actions
 **Undervaluation Scores**: Yahoo Finance-based calculator providing high-quality scores with automatic updates and detailed component analysis
-**Container Health**: All services running with health checks and automatic restarts
+**Container Health**: All services running with health checks and automatic restarts (dev, test, and production profiles active)
 **Data Quality**: High-quality financial data with comprehensive error handling
 **Data Visualization**: Interactive price charts with period selection, volume analysis, and real-time statistics
 **User Experience**: Enhanced interface with streamlined design, comprehensive valuation analysis, and improved functionality
-**Test Coverage**: Comprehensive API endpoint testing with 100% endpoint coverage, error handling validation, and edge case testing
+**Test Coverage**: Comprehensive test suite with advanced features (parallel execution, coverage reports, markers, etc.)
 
-### 📋 Validation Commands
+### 📋 Testing and Validation
+
+**IMPORTANT: Use test containers for all testing to avoid affecting development data**
 
 ```bash
-# Test scheduler status
-docker exec -it sa-sch python scheduler.py status
+# Test scheduler status (use test containers)
+docker exec -it sa-test-sch python scheduler.py status
 
-# Check gap tracking
-docker exec -it sa-pg psql -U stockanalyst -d stockanalyst -c "SELECT * FROM data_gaps LIMIT 10;"
+# Check gap tracking (test database)
+docker exec -it sa-test-pg psql -U stockanalyst -d stockanalyst_test -c "SELECT * FROM data_gaps LIMIT 10;"
 
-# Monitor scheduler logs
-docker compose logs -f scheduler
+# Monitor scheduler logs (test scheduler)
+docker compose logs -f test-scheduler
 
-# Test web application
-docker exec -it sa-web python webapp_launcher.py --mode development
+# Test web application (test webapp)
+docker exec -it sa-test-web python webapp_launcher.py --mode development
 
-# Check undervaluation scores
-docker exec sa-pg psql -U stockanalyst -d stockanalyst -c "SELECT COUNT(*) FROM undervaluation_scores WHERE undervaluation_score IS NOT NULL;"
+# Check undervaluation scores (test database)
+docker exec sa-test-pg psql -U stockanalyst -d stockanalyst_test -c "SELECT COUNT(*) FROM undervaluation_scores WHERE undervaluation_score IS NOT NULL;"
 
-# Test automatic recalculation
-docker exec sa-pg psql -U stockanalyst -d stockanalyst -c "SELECT * FROM pending_undervaluation_recalcs;"
+# Test automatic recalculation (test database)
+docker exec sa-test-pg psql -U stockanalyst -d stockanalyst_test -c "SELECT * FROM pending_undervaluation_recalcs;"
 
-# Run undervaluation calculator
-docker exec sa-web python yfinance_undervaluation_calculator.py
+# Run undervaluation calculator (test webapp)
+docker exec sa-test-web python yfinance_undervaluation_calculator.py
 
-# Process recalculation queue
-docker exec sa-web python undervaluation_queue_processor.py
+# Process recalculation queue (test webapp)
+docker exec sa-test-web python undervaluation_queue_processor.py
 
-# Run comprehensive API tests
-docker exec sa-web python tests/test_api_routes_extended.py
+# Run comprehensive API tests (test webapp)
+docker exec sa-test-web python tests/test_api_routes_extended.py
 
-# Run API integration tests
-docker exec sa-web python tests/test_api_integration.py
+# Run API integration tests (test webapp)
+docker exec sa-test-web python tests/test_api_integration.py
 
-# Test all API endpoints functionality
-docker exec sa-web python tests/test_api_debug.py
+# Test all API endpoints functionality (test webapp)
+docker exec sa-test-web python tests/test_api_debug.py
 
-# Enhanced data collection for missing valuation data
-docker exec sa-web python enhanced_data_collector.py
+# Enhanced data collection for missing valuation data (test webapp)
+docker exec sa-test-web python enhanced_data_collector.py
 
-# Check enhanced data collection status
-docker exec sa-web python check_enhanced_data_status.py
+# Check enhanced data collection status (test webapp)
+docker exec sa-test-web python check_enhanced_data_status.py
 
-# Run batch collection for remaining companies
-docker exec sa-web python run_enhanced_collection.py
+# Run batch collection for remaining companies (test webapp)
+docker exec sa-test-web python run_enhanced_collection.py
 
-# Check for fake/test data contamination
-docker exec sa-web python check_fake_data.py
+# Check for fake/test data contamination (test webapp)
+docker exec sa-test-web python check_fake_data.py
 ```
 
-## Known Issues and Solutions
 
-### Resolved Issues ✅
-- [x] Gap detection missing new data types → Enhanced gap detector
-- [x] Template syntax errors → Fixed format_currency filter usage
-- [x] Missing analyst recommendations route → Added general route
-- [x] Docker containers missing system tools → Added procps, net-tools, lsof
-- [x] Flask application restart/reload → **FIXED** - stop.sh script now works properly
-- [x] Gap detection artificial limits → **FIXED** - Removed 50-item limits, now shows full scope
-- [x] Scheduler not running catchup → **FIXED** - Implemented startup catchup execution
-- [x] Rate limiting not working → **FIXED** - 3-consecutive-error detection with 1-hour pause
-- [x] Catchup strategy enhancement → **COMPLETED** - Data unavailability handling implemented
-- [x] Profile data gap handling → **FIXED** - Added missing profile_data gap type to scheduler
-- [x] Database constraint errors → **FIXED** - Implemented proper UPSERT logic for all data types
-- [x] Slow undervaluation calculations → **SOLVED** - Created fast Yahoo Finance-based calculator
-- [x] Calculate Undervaluation button error → **FIXED** - Corrected API endpoint and JSON response parsing
-- [x] Missing valuation analysis interface → **COMPLETED** - Added comprehensive Valuation tab with component scores
-- [x] Redundant UI elements → **RESOLVED** - Streamlined interface with appropriate information density
-
-### Outstanding Issues ⚠️
-- [x] Price data gap detection error → **RESOLVED** - Fixed `datetime.date` iteration error in gap_detector.py
-
-### Future Enhancements 🔮
-- [ ] Add financial statement trend charts and ratio visualizations
-- [ ] Implement data export functionality (CSV/Excel export)
-- [ ] Add real-time data refresh capabilities for charts
-- [ ] Enhance error handling for missing financial data with more granular status messages
-- [ ] Add email or push notifications for significant price movements
-- [ ] Implement more sophisticated sector-specific undervaluation models
-- [ ] Add news section to stock detail pages
-- [ ] Implement persistent job store for scheduler (Redis/database)
-- [ ] Add candlestick charts and technical indicators
-- [ ] Implement comparative analysis charts between stocks
 
 ---
 
 This development guide should be kept up-to-date as the application evolves. When adding new features or making architectural changes, please update the relevant sections of this document.
 
-*Last Updated: 2025-07-08*
-*Status: All major features complete, undervaluation system with automatic recalculation active, interactive price charts implemented, enhanced user interface with comprehensive valuation analysis completed, comprehensive API test coverage implemented*
+*Last Updated: 2025-07-13*
+*Status: All major features complete, undervaluation system with automatic recalculation active, interactive price charts implemented, enhanced user interface with comprehensive valuation analysis completed, comprehensive API test coverage implemented. Documentation updated to reflect actual container architecture using Dockerfile.main with multi-stage builds, current app version 0.0.25, and externally managed development environment.*

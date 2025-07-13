@@ -11,7 +11,7 @@ class BaseConfig:
     """Base configuration with all settings"""
     
     # Application Configuration
-    APP_VERSION = "0.0.25"
+    APP_VERSION = "0.0.26"
     
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')
@@ -19,8 +19,7 @@ class BaseConfig:
     FMP_RATE_LIMIT_REQUESTS_PER_SECOND = 4
     FMP_RATE_LIMIT_DELAY = 0.25  # 250ms between requests
     
-    # Database Configuration
-    DATABASE_PATH = os.getenv('DATABASE_PATH', 'stock_analysis.db')
+    # Database Configuration (legacy SQLite support removed)
     
     # PostgreSQL Configuration (for containerized deployment)
     POSTGRES_HOST = os.getenv('POSTGRES_HOST')
@@ -333,10 +332,8 @@ class TestConfig(BaseConfig):
     """Test-specific configuration"""
     DEBUG = True
     LOG_LEVEL = 'DEBUG'
-    DATABASE_PATH = ':memory:'  # In-memory database for tests
     
-    # Override PostgreSQL for tests - use in-memory SQLite
-    POSTGRES_HOST = None
+    # Test configuration uses isolated test PostgreSQL database
     SECRET_KEY = 'test-secret-key'
     
     DAILY_REQUEST_BUDGET = {
