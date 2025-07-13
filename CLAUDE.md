@@ -258,6 +258,8 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 
 **EnhancedDataCollector (enhanced_data_collector.py)** - A dedicated service to collect additional data points (e.g., beta, book value) from Yahoo Finance to improve the quality of valuation metrics.
 
+**ShortSqueezeAnalyzer (short_squeeze_analyzer.py)** - Quantitative short squeeze susceptibility analysis engine implementing multi-factor scoring algorithm with weighted components: Short Interest % (40%), Days to Cover (30%), Float Size (15%), and Momentum indicators (15%)
+
 ### Key Design Patterns
 - **Containerized Microservices**
 - **Event-Driven Architecture** (Database triggers for automatic recalculation)
@@ -298,6 +300,10 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **data_gaps** - Gap tracking with retry mechanisms for data unavailability handling
 - **undervaluation_recalc_queue** - Queue for automatic undervaluation score recalculation. Managed by triggers defined in `create_undervaluation_triggers.sql`.
 
+#### Short Squeeze Analysis Tables
+- **short_interest_data** - Raw short interest data from Yahoo Finance including short interest percentage, days to cover, float shares, and average daily volume with unique constraints on symbol/date combinations
+- **short_squeeze_scores** - Calculated short squeeze susceptibility scores with component breakdowns (SI, DTC, Float, Momentum), data quality assessment, and weighted final scores with automatic timestamp tracking
+
 ### Undervaluation Calculation System
 
 #### Yahoo Finance-Based Calculator (Primary)
@@ -313,6 +319,21 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **Real-Time Updates**: Scores update automatically when underlying data changes
 - **Efficient Processing**: Batch processing with configurable intervals
 
+### Short Squeeze Analysis System
+
+#### Quantitative Scoring Algorithm
+- **Multi-Factor Analysis**: Combines Short Interest %, Days to Cover, Float Size, and Momentum indicators
+- **Weighted Scoring**: SI% (40% weight), DTC (30% weight), Float (15% weight), Momentum (15% weight)
+- **Technical Indicators**: RSI calculation and relative volume analysis for momentum scoring
+- **Data Quality Assessment**: Classifies data reliability as high, medium, low, or insufficient
+- **Risk Classification**: Categorizes stocks as high (≥70), moderate (50-69), or low (<50) squeeze potential
+
+#### Weekly Data Collection
+- **Yahoo Finance Integration**: Extended YahooFinanceClient with short interest data collection
+- **Automated Scheduling**: Weekly data updates integrated into existing scheduler system
+- **Rate Limiting**: 1-second delays between API calls to respect Yahoo Finance limits
+- **Error Handling**: Distinguishes between rate limits and data unavailability with intelligent retry
+
 ### Application Architecture
 - **Containerized Microservices Architecture**
 - **PostgreSQL Database** - Persistent data storage with health checks and triggers
@@ -321,11 +342,22 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **Development Environment** - Full-featured container with Docker socket access and development tools
 
 ### Web Application Architecture
-- **Frontend** - Bootstrap-based responsive interface with interactive financial data visualization
-- **Backend** - Flask API with data access layer and comprehensive financial data endpoints
+- **Frontend** - Bootstrap-based responsive interface with interactive financial data visualization and short squeeze analysis dashboard
+- **Backend** - Flask API with data access layer and comprehensive financial data endpoints including short squeeze analysis
 - **Authentication** - Secure user management with session handling
 - **Portfolio Management** - Investment tracking and transaction management
 - **Data Visualization** - Chart.js integration for interactive price charts and volume analysis
+
+#### Short Squeeze Web Features
+- **Dashboard Route** (`/squeeze`) - Interactive short squeeze analysis screening page with advanced filtering
+- **Stock Detail Integration** - Short squeeze button and modal in individual stock pages
+- **API Endpoints**:
+  - `GET /api/v2/squeeze/rankings` - Ranked short squeeze candidates with filtering
+  - `GET /api/v2/squeeze/stats` - Summary statistics for short squeeze data
+  - `GET /api/v2/squeeze/short-interest` - Recent short interest data across all symbols
+  - `GET /api/v2/stocks/{symbol}/squeeze` - Comprehensive squeeze analysis for specific stock
+  - `GET /api/v2/stocks/{symbol}/short-interest` - Short interest data for specific stock
+  - `GET /api/v2/stocks/{symbol}/squeeze-score` - Squeeze score for specific stock
 
 ### Data Collection and Processing
 
@@ -335,6 +367,7 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 - **Corporate Actions** - Dividend and stock split tracking with historical data
 - **Analyst Recommendations** - Analyst ratings with trend analysis
 - **Historical Prices** - Complete price history with volume data
+- **Short Interest Data** - Short interest percentage, days to cover, float shares, and trading volume metrics for squeeze analysis
 
 #### Enhanced Scheduler System
 - **Gap Detection** - Identifies missing data across all financial data types
@@ -400,10 +433,11 @@ docker exec -it sa-sch python scheduler.py status  # Check scheduler
 
 ### 🔄 Current Status
 
-**Application State**: Fully functional with comprehensive financial data collection, analysis, interactive visualization, enhanced user interface, and complete test coverage
-**Application Version**: 0.0.26 (defined in unified_config.py:14)
-**Data Coverage**: 500+ S&P 500 companies with profile data, financial statements, and corporate actions
+**Application State**: Fully functional with comprehensive financial data collection, analysis, interactive visualization, enhanced user interface, short squeeze analysis, and complete test coverage
+**Application Version**: 0.0.27 (defined in unified_config.py:14)
+**Data Coverage**: 500+ S&P 500 companies with profile data, financial statements, corporate actions, and short interest data
 **Undervaluation Scores**: Yahoo Finance-based calculator providing high-quality scores with automatic updates and detailed component analysis
+**Short Squeeze Analysis**: Quantitative multi-factor scoring system with weekly data collection, interactive dashboard, and comprehensive API endpoints
 **Container Health**: All services running with health checks and automatic restarts (dev, test, and production profiles active)
 **Data Quality**: High-quality financial data with comprehensive error handling
 **Data Visualization**: Interactive price charts with period selection, volume analysis, and real-time statistics
@@ -459,6 +493,19 @@ docker exec sa-test-web python run_enhanced_collection.py
 
 # Check for fake/test data contamination (test webapp)
 docker exec sa-test-web python check_fake_data.py
+
+# Short Squeeze Analysis Testing and Validation (test webapp)
+docker exec sa-test-web python short_squeeze_analyzer.py
+
+# Run short squeeze comprehensive test suite (test webapp)
+docker exec sa-test-web python tests/test_short_squeeze_comprehensive.py
+
+# Test individual short squeeze components (test webapp)
+docker exec sa-test-web python -m pytest tests/test_short_squeeze_analyzer.py -v
+docker exec sa-test-web python -m pytest tests/test_api_routes_short_squeeze.py -v
+
+# Performance testing for short squeeze analysis (test webapp)
+docker exec sa-test-web python -m pytest tests/test_short_squeeze_performance.py -v -s
 ```
 
 
@@ -468,4 +515,4 @@ docker exec sa-test-web python check_fake_data.py
 This development guide should be kept up-to-date as the application evolves. When adding new features or making architectural changes, please update the relevant sections of this document.
 
 *Last Updated: 2025-07-13*
-*Status: All major features complete, undervaluation system with automatic recalculation active, interactive price charts implemented, enhanced user interface with comprehensive valuation analysis completed, comprehensive API test coverage implemented. Documentation updated to reflect actual container architecture using Dockerfile.main with multi-stage builds, current app version 0.0.25, and externally managed development environment.*
+*Status: All major features complete including short squeeze analysis, undervaluation system with automatic recalculation active, interactive price charts implemented, enhanced user interface with comprehensive valuation analysis completed, comprehensive API test coverage implemented. Documentation updated to reflect actual container architecture using Dockerfile.main with multi-stage builds, current app version 0.0.27, short squeeze quantitative analysis system, and externally managed development environment.*
