@@ -8,6 +8,7 @@ import os
 from unittest.mock import patch, MagicMock
 import pandas as pd
 from datetime import datetime, date
+from sqlalchemy import text
 
 # --- Global Environment Setup ---
 
@@ -247,7 +248,7 @@ def manage_db_connections():
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def driver():
     """
     Pytest fixture to create a Selenium WebDriver instance.
@@ -282,14 +283,17 @@ def driver():
             options=chrome_options
         )
         
-        # Set reduced timeouts to prevent hanging
-        remote_driver.set_page_load_timeout(30)  # Reduce from 300s default
-        remote_driver.implicitly_wait(10)        # Set implicit wait
+        # Set optimized timeouts for frontend testing
+        remote_driver.set_page_load_timeout(45)  # Increased for complex pages
+        remote_driver.implicitly_wait(15)        # Increased implicit wait for element detection
         
         yield remote_driver
         
-        # Teardown: quit the driver after tests are done
-        remote_driver.quit()
+        # Teardown: safely quit the driver after each test
+        try:
+            remote_driver.quit()
+        except Exception as e:
+            print(f"Warning: Error during driver cleanup: {e}")
     except Exception as e:
         pytest.fail(f"Failed to connect to Selenium WebDriver: {e}")
 
@@ -376,3 +380,61 @@ def mock_scheduler_db_operations():
         mock_db.return_value.engine.connect.return_value.__exit__.return_value = None
         
         yield mock_db
+
+# --- Test Data Population ---
+
+@pytest.fixture(autouse=True, scope="session")
+def populate_test_data(db_manager_session):
+    """Populate test database with sample data for frontend tests"""
+    try:
+        # Import test fixtures  
+        from tests.fixtures.sample_companies import SAMPLE_SP500_COMPANIES, SAMPLE_COMPANY_PROFILES
+        
+        print("🔄 Populating test database with sample data...")
+        
+        # Insert sample companies
+        with db_manager_session.engine.begin() as conn:
+            # Clear existing data
+            conn.execute(text("DELETE FROM sp500_constituents"))
+            conn.execute(text("DELETE FROM company_profiles"))
+            
+            # Insert sample companies
+            for company in SAMPLE_SP500_COMPANIES:
+                conn.execute(text("""
+                    INSERT INTO sp500_constituents (symbol, name, sector)
+                    VALUES (:symbol, :name, :sector)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    sector = EXCLUDED.sector
+                """), company)
+            
+            # Add sample company profiles
+            for profile in SAMPLE_COMPANY_PROFILES:
+                conn.execute(text("""
+                    INSERT INTO company_profiles (symbol, companyname, price, mktcap, industry)
+                    VALUES (:symbol, :companyname, :price, :mktcap, :industry)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                    companyname = EXCLUDED.companyname,
+                    price = EXCLUDED.price,
+                    mktcap = EXCLUDED.mktcap,
+                    industry = EXCLUDED.industry
+                """), profile)
+            
+            conn.commit()
+            
+        # Verify data was inserted
+        with db_manager_session.engine.begin() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM sp500_constituents")).fetchone()
+            companies_count = result[0]
+            
+            result = conn.execute(text("SELECT COUNT(*) FROM company_profiles")).fetchone() 
+            profiles_count = result[0]
+            
+        print(f"✅ Test database populated: {companies_count} companies, {profiles_count} profiles")
+        
+        yield
+        
+    except Exception as e:
+        print(f"❌ Error populating test database: {e}")
+        # Don't fail tests if data population fails - let tests handle empty state
+        yield

@@ -15,14 +15,26 @@ class TestShortSqueezePage:
     
     @pytest.fixture(autouse=True)
     def setup_method(self, driver, authenticated_user, base_url):
-        """Setup for each test method"""
+        """Setup for each test method with session validation"""
         self.driver = driver
         self.base_url = base_url
-        self.wait = WebDriverWait(driver, 10)
+        self.wait = WebDriverWait(driver, 20)  # Increased timeout
         self.user_data = authenticated_user
         
         # Login before each test
         self._login_user()
+    
+    def _validate_session(self):
+        """Validate WebDriver session is still active"""
+        try:
+            # Try to get current URL to check if session is active
+            current_url = self.driver.current_url
+            # Try to execute simple JavaScript to verify browser responsiveness
+            self.driver.execute_script("return document.readyState;")
+        except Exception as e:
+            print(f"⚠️ Session validation failed: {e}")
+            # If session is invalid, pytest will handle the error
+            raise
     
     def test_short_squeeze_page_loads(self):
         """

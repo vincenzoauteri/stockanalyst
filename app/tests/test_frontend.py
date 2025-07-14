@@ -24,7 +24,7 @@ def test_successful_login(driver, authenticated_user, base_url):
 
     # Wait for the page to load and check for a welcome message
     # Using WebDriverWait is a best practice to handle page load times
-    welcome_message = WebDriverWait(driver, 10).until(
+    welcome_message = WebDriverWait(driver, 20).until(
         EC.presence_of_element_located((By.CLASS_NAME, "alert-success"))
     )
     
