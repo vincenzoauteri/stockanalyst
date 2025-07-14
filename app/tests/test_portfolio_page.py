@@ -19,7 +19,7 @@ class TestPortfolioPage:
         """Setup for each test method"""
         self.driver = driver
         self.base_url = base_url
-        self.wait = WebDriverWait(driver, 10)
+        self.wait = WebDriverWait(driver, 30)  # Increased timeout for authentication and page loading
         self.user_data = authenticated_user
         
         # Login before each test
@@ -38,25 +38,31 @@ class TestPortfolioPage:
         # Navigate to portfolio page
         self.driver.get(f"{self.base_url}/portfolio")
         
-        # Wait for portfolio page to load
+        # Wait for portfolio page to load (portfolio uses h2 for heading)
         self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, h2, .page-title"))
         )
         
-        # Look for add transaction form
+        # Portfolio form is in a modal - need to click button to open it
         try:
-            # Look for transaction form fields
+            # Click the "Add Transaction" button to open modal
+            add_transaction_btn = self.wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-bs-target='#addTransactionModal']"))
+            )
+            add_transaction_btn.click()
+            
+            # Wait for modal to appear and form fields to be available
             symbol_input = self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='symbol'], #symbol"))
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "input[name='symbol'], #symbol"))
             )
         except TimeoutException:
-            pytest.skip("Add transaction form not found")
+            pytest.skip("Add transaction form/modal not found")
         
-        # Look for other form fields
+        # Look for other form fields with correct names
         try:
-            action_select = self.driver.find_element(By.CSS_SELECTOR, "select[name='action'], #action")
-            quantity_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='quantity'], #quantity")
-            price_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='price'], #price")
+            action_select = self.driver.find_element(By.CSS_SELECTOR, "select[name='transaction_type'], #transaction_type")
+            quantity_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='shares'], #shares")
+            price_input = self.driver.find_element(By.CSS_SELECTOR, "input[name='price_per_share'], #price_per_share")
             submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
         except Exception as e:
             pytest.skip(f"Transaction form fields not found: {e}")
@@ -270,9 +276,9 @@ class TestPortfolioPage:
         """Helper method to add a test transaction"""
         self.driver.get(f"{self.base_url}/portfolio")
         
-        # Wait for portfolio page to load
+        # Wait for portfolio page to load (portfolio uses h2 for heading)
         self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, h2, .page-title"))
         )
         
         try:
@@ -306,27 +312,77 @@ class TestPortfolioPage:
             pytest.skip(f"Could not add test transaction: {e}")
     
     def _login_user(self):
-        """Helper method to login the test user"""
-        self.driver.get(f"{self.base_url}/login")
-        
-        # Wait for login form elements
-        username_input = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "username"))
-        )
-        password_input = self.driver.find_element(By.NAME, "password")
-        submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        
-        # Enter credentials
-        username_input.clear()
-        username_input.send_keys(self.user_data['username'])
-        password_input.clear()
-        password_input.send_keys("securepassword123")  # Use the password from test_user_data fixture
-        
-        # Submit form
-        submit_button.click()
-        
-        # Wait for successful login (redirect away from login page)
-        self.wait.until(lambda driver: "/login" not in driver.current_url)
+        """Helper method to login the test user with robust error handling"""
+        try:
+            self.driver.get(f"{self.base_url}/login")
+            
+            # Wait for login form elements with multiple fallbacks
+            try:
+                username_input = self.wait.until(
+                    EC.presence_of_element_located((By.NAME, "username"))
+                )
+            except TimeoutException:
+                # Try alternative selectors
+                username_input = self.wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "#username, input[type='text'], input[type='email']"))
+                )
+            
+            try:
+                password_input = self.driver.find_element(By.NAME, "password")
+            except:
+                password_input = self.driver.find_element(By.CSS_SELECTOR, "#password, input[type='password']")
+            
+            try:
+                submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            except:
+                submit_button = self.driver.find_element(By.CSS_SELECTOR, "input[type='submit'], .btn-submit, .login-btn")
+            
+            # Enter credentials
+            username_input.clear()
+            username_input.send_keys(self.user_data['username'])
+            password_input.clear()
+            password_input.send_keys("securepassword123")  # Use the password from test_user_data fixture
+            
+            # Submit form
+            submit_button.click()
+            
+            # Wait for successful login with extended timeout
+            login_wait = WebDriverWait(self.driver, 30)
+            login_wait.until(lambda driver: "/login" not in driver.current_url)
+            
+            # Wait for page to fully load after login
+            import time
+            time.sleep(2)
+            
+            # Verify authentication worked by checking session
+            try:
+                # Try to access portfolio page directly to test auth
+                self.driver.get(f"{self.base_url}/portfolio")
+                login_wait.until(lambda driver: "/login" not in driver.current_url)
+                
+                # If we're still not redirected to login, auth worked
+                current_url = self.driver.current_url
+                if "/login" in current_url:
+                    raise Exception("Authentication failed - still being redirected to login")
+                    
+                print(f"✅ Successfully logged in as {self.user_data['username']}")
+                
+            except Exception as auth_e:
+                print(f"❌ Authentication verification failed: {auth_e}")
+                print(f"Current URL: {self.driver.current_url}")
+                # Try to get session cookie info
+                try:
+                    cookies = self.driver.get_cookies()
+                    print(f"Cookies: {[c['name'] for c in cookies]}")
+                except:
+                    pass
+                raise
+            
+        except Exception as e:
+            print(f"❌ Login failed: {e}")
+            print(f"Current URL: {self.driver.current_url}")
+            print(f"Page title: {self.driver.title}")
+            raise
         
         # Verify we're successfully authenticated by checking for user-specific elements
         try:

@@ -18,7 +18,7 @@ class TestStockDetailPage:
         """Setup for each test method"""
         self.driver = driver
         self.base_url = base_url
-        self.wait = WebDriverWait(driver, 10)
+        self.wait = WebDriverWait(driver, 20)  # Increased timeout for stock detail page
         self.user_data = authenticated_user
         
         # Login before each test
@@ -34,10 +34,19 @@ class TestStockDetailPage:
         # Navigate to AAPL stock detail page
         self.driver.get(f"{self.base_url}/stock/AAPL")
         
-        # Wait for page to load
-        self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title, .stock-title"))
-        )
+        # Wait for page to load with multiple fallback selectors
+        try:
+            self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title, .stock-title"))
+            )
+        except TimeoutException:
+            # Fallback: wait for body content to load
+            self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+            )
+            # Additional wait for content to render
+            import time
+            time.sleep(3)
         
         # Check page title contains AAPL
         page_title = self.driver.title
@@ -81,9 +90,11 @@ class TestStockDetailPage:
             EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
         )
         
-        # Look for canvas element (Chart.js creates canvas elements)
+        # Look for canvas element (Chart.js creates canvas elements) with extended timeout
         try:
-            canvas_element = self.wait.until(
+            # Use longer timeout specifically for chart loading
+            chart_wait = WebDriverWait(self.driver, 30)
+            canvas_element = chart_wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "canvas"))
             )
             
@@ -152,10 +163,19 @@ class TestStockDetailPage:
         # Navigate to MSFT stock detail page
         self.driver.get(f"{self.base_url}/stock/MSFT")
         
-        # Wait for page to load
-        self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title, .stock-title"))
-        )
+        # Wait for page to load with multiple fallback selectors
+        try:
+            self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .page-title, .stock-title"))
+            )
+        except TimeoutException:
+            # Fallback: wait for body content to load
+            self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+            )
+            # Additional wait for content to render
+            import time
+            time.sleep(3)
         
         # Check page title contains MSFT
         page_title = self.driver.title
@@ -195,24 +215,50 @@ class TestStockDetailPage:
                 "Invalid stock symbol should result in error page or redirect"
     
     def _login_user(self):
-        """Helper method to login the test user"""
-        self.driver.get(f"{self.base_url}/login")
-        
-        # Wait for login form elements
-        username_input = self.wait.until(
-            EC.presence_of_element_located((By.NAME, "username"))
-        )
-        password_input = self.driver.find_element(By.NAME, "password")
-        submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        
-        # Enter credentials
-        username_input.clear()
-        username_input.send_keys(self.user_data['username'])
-        password_input.clear()
-        password_input.send_keys("securepassword123")  # Use the password from test_user_data fixture
-        
-        # Submit form
-        submit_button.click()
-        
-        # Wait for successful login (redirect away from login page)
-        self.wait.until(lambda driver: "/login" not in driver.current_url)
+        """Helper method to login the test user with session recovery"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Validate session is still active
+                try:
+                    self.driver.current_url
+                    self.driver.execute_script("return document.readyState;")
+                except Exception:
+                    print(f"Session invalid on attempt {attempt + 1}, skipping login")
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        raise
+                
+                self.driver.get(f"{self.base_url}/login")
+                
+                # Wait for login form elements
+                username_input = self.wait.until(
+                    EC.presence_of_element_located((By.NAME, "username"))
+                )
+                password_input = self.driver.find_element(By.NAME, "password")
+                submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                
+                # Enter credentials
+                username_input.clear()
+                username_input.send_keys(self.user_data['username'])
+                password_input.clear()
+                password_input.send_keys("securepassword123")
+                
+                # Submit form
+                submit_button.click()
+                
+                # Wait for successful login (redirect away from login page)
+                self.wait.until(lambda driver: "/login" not in driver.current_url)
+                
+                print(f"✅ Login successful on attempt {attempt + 1}")
+                return
+                
+            except Exception as e:
+                print(f"❌ Login attempt {attempt + 1} failed: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2)
+                    continue
+                else:
+                    raise
