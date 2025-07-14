@@ -19,7 +19,7 @@
     <div class="col-md-6">
         <div class="input-group">
             <span class="input-group-text"><i class="fas fa-search"></i></span>
-            <input type="text" class="form-control" id="searchInput" placeholder="Search stocks by symbol or company name...">
+            <input type="text" class="form-control" id="searchInput" placeholder="Search stocks by symbol or company name..." value="{{ filters.search or '' }}">
         </div>
     </div>
     <div class="col-md-3">
@@ -181,6 +181,7 @@
                                                                 sector=filters.sector, 
                                                                 min_score=filters.min_score,
                                                                 max_score=filters.max_score,
+                                                                search=filters.search,
                                                                 sort=filters.sort,
                                                                 order=filters.order) }}">
                                 <i class="fas fa-chevron-left"></i>
@@ -206,6 +207,7 @@
                                                                         sector=filters.sector, 
                                                                         min_score=filters.min_score,
                                                                         max_score=filters.max_score,
+                                                                        search=filters.search,
                                                                         sort=filters.sort,
                                                                         order=filters.order) }}">
                                         {{ page_num }}
@@ -226,6 +228,7 @@
                                                                 sector=filters.sector, 
                                                                 min_score=filters.min_score,
                                                                 max_score=filters.max_score,
+                                                                search=filters.search,
                                                                 sort=filters.sort,
                                                                 order=filters.order) }}">
                                 <i class="fas fa-chevron-right"></i>
@@ -269,6 +272,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const profileFilter = document.getElementById('profileFilter');
     let stockItems = document.querySelectorAll('.stock-item');
     const noResults = document.getElementById('noResults');
+    
+    let searchTimeout;
 
     // Column sorting functionality - Server-side sorting
     let currentSort = {
@@ -323,32 +328,46 @@ document.addEventListener('DOMContentLoaded', function() {
         window.location.href = url.toString();
     }
 
-    function filterStocks() {
-        const searchTerm = searchInput.value.toLowerCase();
+    function performSearch() {
+        const searchTerm = searchInput.value.trim();
         const selectedSector = sectorFilter.value;
         const selectedProfile = profileFilter.value;
         
+        // Build URL with current filters and reset to page 1
+        const url = new URL(window.location);
+        url.searchParams.set('page', '1'); // Reset to first page when searching
+        
+        if (searchTerm) {
+            url.searchParams.set('search', searchTerm);
+        } else {
+            url.searchParams.delete('search');
+        }
+        
+        if (selectedSector) {
+            url.searchParams.set('sector', selectedSector);
+        } else {
+            url.searchParams.delete('sector');
+        }
+        
+        // Profile filter is still client-side for now since it's not in backend
+        // This could be moved to server-side later if needed
+        
+        // Navigate to new URL to trigger server-side search
+        window.location.href = url.toString();
+    }
+    
+    function filterStocks() {
+        // Legacy function for profile filter (client-side only)
+        const selectedProfile = profileFilter.value;
+        
         let visibleCount = 0;
+        stockItems = document.querySelectorAll('.stock-item'); // Refresh stock items
 
         stockItems.forEach(item => {
-            const symbol = item.dataset.symbol.toLowerCase();
-            const name = item.dataset.name;
-            const sector = item.dataset.sector;
             const hasProfile = item.dataset.hasProfile === '1';
-
             let visible = true;
 
-            // Search filter
-            if (searchTerm && !symbol.includes(searchTerm) && !name.includes(searchTerm)) {
-                visible = false;
-            }
-
-            // Sector filter
-            if (selectedSector && sector !== selectedSector) {
-                visible = false;
-            }
-
-            // Profile filter
+            // Profile filter (client-side)
             if (selectedProfile === 'with_profile' && !hasProfile) {
                 visible = false;
             } else if (selectedProfile === 'no_profile' && hasProfile) {
@@ -380,9 +399,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Attach event listeners
-    searchInput.addEventListener('input', filterStocks);
-    sectorFilter.addEventListener('change', filterStocks);
-    profileFilter.addEventListener('change', filterStocks);
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        if (searchInput.value.trim() === '') {
+            // If search is cleared, perform search immediately to show all results
+            performSearch();
+        } else {
+            searchTimeout = setTimeout(performSearch, 500); // Debounce search by 500ms
+        }
+    });
+    
+    sectorFilter.addEventListener('change', performSearch);
+    profileFilter.addEventListener('change', filterStocks); // Profile filter remains client-side
 
     // Add table row interactions and click functionality
     stockItems.forEach(item => {

@@ -131,6 +131,7 @@ def index():
         sector = request.args.get('sector')
         min_score = request.args.get('min_score', type=float)
         max_score = request.args.get('max_score', type=float)
+        search = request.args.get('search')
         sort_by = request.args.get('sort', 'symbol')
         sort_order = request.args.get('order', 'asc')
         
@@ -147,7 +148,8 @@ def index():
         total_count = service.get_stocks_count(
             sector=sector,
             min_score=min_score,
-            max_score=max_score
+            max_score=max_score,
+            search=search
         )
         
         # Get paginated stocks
@@ -155,6 +157,7 @@ def index():
             sector=sector,
             min_score=min_score,
             max_score=max_score,
+            search=search,
             sort_by=sort_by,
             sort_order=sort_order,
             limit=per_page,
@@ -186,6 +189,7 @@ def index():
             'sector': sector,
             'min_score': min_score,
             'max_score': max_score,
+            'search': search,
             'sort': sort_by,
             'order': sort_order
         }

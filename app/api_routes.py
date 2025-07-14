@@ -49,6 +49,7 @@ def api_get_stocks():
             sector = request.args.get('sector')
             min_score = request.args.get('min_score', type=float)
             max_score = request.args.get('max_score', type=float)
+            search = request.args.get('search')
             sort_field = request.args.get('sort', 'symbol')
             sort_order = request.args.get('order', 'asc')
             page = request.args.get('page', 1, type=int)
@@ -71,7 +72,8 @@ def api_get_stocks():
         total_count = service.get_stocks_count(
             sector=sector,
             min_score=min_score,
-            max_score=max_score
+            max_score=max_score,
+            search=search
         )
         
         # Get paginated stocks with database-level filtering and sorting
@@ -79,6 +81,7 @@ def api_get_stocks():
             sector=sector,
             min_score=min_score,
             max_score=max_score,
+            search=search,
             sort_by=sort_field,
             sort_order=sort_order,
             limit=per_page,
@@ -121,6 +124,7 @@ def api_get_stocks():
                 'sector': sector,
                 'min_score': min_score,
                 'max_score': max_score,
+                'search': search,
                 'sort': sort_field,
                 'order': sort_order
             }

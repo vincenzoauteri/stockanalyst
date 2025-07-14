@@ -28,6 +28,7 @@ class StockDataService:
                                    sector: Optional[str] = None,
                                    min_score: Optional[float] = None,
                                    max_score: Optional[float] = None,
+                                   search: Optional[str] = None,
                                    sort_by: str = 'symbol',
                                    sort_order: str = 'asc',
                                    limit: Optional[int] = None,
@@ -39,6 +40,7 @@ class StockDataService:
             sector: Filter by sector (optional)
             min_score: Minimum undervaluation score (optional)
             max_score: Maximum undervaluation score (optional)
+            search: Search term for symbol or company name (optional)
             sort_by: Field to sort by (symbol, score, price, market_cap, sector)
             sort_order: Sort order (asc, desc)
             limit: Maximum number of results to return
@@ -64,6 +66,11 @@ class StockDataService:
                 if max_score is not None:
                     where_conditions.append("u.undervaluation_score <= :max_score")
                     params['max_score'] = max_score
+                
+                if search:
+                    # Search in both symbol and company name (case-insensitive)
+                    where_conditions.append("(UPPER(s.symbol) LIKE UPPER(:search) OR UPPER(s.name) LIKE UPPER(:search))")
+                    params['search'] = f"%{search}%"
                 
                 where_clause = ""
                 if where_conditions:
@@ -151,7 +158,8 @@ class StockDataService:
     def get_stocks_count(self, 
                         sector: Optional[str] = None,
                         min_score: Optional[float] = None,
-                        max_score: Optional[float] = None) -> int:
+                        max_score: Optional[float] = None,
+                        search: Optional[str] = None) -> int:
         """
         Get total count of stocks matching the filters
         
@@ -159,6 +167,7 @@ class StockDataService:
             sector: Filter by sector (optional)
             min_score: Minimum undervaluation score (optional)
             max_score: Maximum undervaluation score (optional)
+            search: Search term for symbol or company name (optional)
             
         Returns:
             Total count of stocks matching filters
@@ -180,6 +189,11 @@ class StockDataService:
                 if max_score is not None:
                     where_conditions.append("u.undervaluation_score <= :max_score")
                     params['max_score'] = max_score
+                
+                if search:
+                    # Search in both symbol and company name (case-insensitive)
+                    where_conditions.append("(UPPER(s.symbol) LIKE UPPER(:search) OR UPPER(s.name) LIKE UPPER(:search))")
+                    params['search'] = f"%{search}%"
                 
                 where_clause = ""
                 if where_conditions:
