@@ -18,9 +18,9 @@ logger = get_logger(__name__)
 class AuthenticationManager:
     """Handles user authentication and session management"""
     
-    def __init__(self):
+    def __init__(self, db_manager=None):
         """Initialize authentication manager"""
-        self.db_manager = DatabaseManager()
+        self.db_manager = db_manager or DatabaseManager()
         logger.info("Initializing AuthenticationManager with centralized DatabaseManager")
         self.create_auth_tables()
         
@@ -140,6 +140,49 @@ class AuthenticationManager:
             return False
     
     @log_function_call
+    def get_user_by_username(self, username: str) -> dict:
+        """Get user by username"""
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('SELECT id, username, email FROM users WHERE username = :username'), 
+                                    {'username': username})
+                user = result.fetchone()
+                if user:
+                    return {'id': user[0], 'username': user[1], 'email': user[2]}
+                return None
+        except Exception as e:
+            logger.error(f"Error getting user by username {username}: {e}")
+            return None
+    
+    @log_function_call
+    def get_user_by_email(self, email: str) -> dict:
+        """Get user by email"""
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('SELECT id, username, email FROM users WHERE email = :email'), 
+                                    {'email': email})
+                user = result.fetchone()
+                if user:
+                    return {'id': user[0], 'username': user[1], 'email': user[2]}
+                return None
+        except Exception as e:
+            logger.error(f"Error getting user by email {email}: {e}")
+            return None
+    
+    @log_function_call
+    def delete_user(self, username: str) -> bool:
+        """Delete user (for test cleanup)"""
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('DELETE FROM users WHERE username = :username'), 
+                                    {'username': username})
+                conn.commit()
+                return result.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error deleting user {username}: {e}")
+            return False
+
+    @log_function_call
     def register_user(self, username: str, email: str, password: str) -> dict:
         """Register a new user"""
         logger.info(f"Registering new user: {username} ({email})")
@@ -155,12 +198,14 @@ class AuthenticationManager:
             return {'success': False, 'error': 'Password must be at least 6 characters long'}
         
         try:
+            # Check if user already exists using helper methods
+            if self.get_user_by_username(username):
+                return {'success': False, 'error': 'Username already exists'}
+            
+            if self.get_user_by_email(email):
+                return {'success': False, 'error': 'Email already registered'}
+            
             with self.db_manager.engine.connect() as conn:
-                # Check if user already exists
-                result = conn.execute(text('SELECT id FROM users WHERE username = :username OR email = :email'), 
-                                    {'username': username, 'email': email})
-                if result.fetchone():
-                    return {'success': False, 'error': 'Username or email already exists'}
                 
                 # Generate password hash
                 password_hash, salt = self.generate_password_hash(password)
@@ -179,7 +224,7 @@ class AuthenticationManager:
                 
         except Exception as e:
             logger.error(f"Error registering user {username}: {e}")
-            return {'success': False, 'error': 'Registration failed. Please try again.'}
+            return {'success': False, 'error': str(e)}
     
     @log_function_call
     def authenticate_user(self, username: str, password: str, ip_address: str = None, user_agent: str = None) -> dict:
@@ -289,7 +334,11 @@ class AuthenticationManager:
                 user_id, expires_at, username, email, is_active = session_data
                 
                 # Check if session has expired
-                expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                if isinstance(expires_at, str):
+                    expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                else:
+                    expires_at_dt = expires_at
+                
                 if datetime.now() > expires_at_dt:
                     logger.debug("Session validation failed: session expired")
                     # Deactivate expired session
@@ -353,6 +402,161 @@ class AuthenticationManager:
                 
         except Exception as e:
             logger.error(f"Error cleaning up expired sessions: {e}")
+
+    @log_function_call
+    def change_password(self, user_id: int, current_password: str, new_password: str) -> dict:
+        """Change user password after verifying current password"""
+        logger.debug(f"Changing password for user ID: {user_id}")
+        
+        try:
+            with self.db_manager.engine.connect() as conn:
+                # Get current user's password hash and salt
+                result = conn.execute(text('''
+                    SELECT password_hash, salt FROM users WHERE id = :user_id AND is_active = true
+                '''), {'user_id': user_id})
+                
+                user_data = result.fetchone()
+                if not user_data:
+                    logger.warning(f"Password change failed: user {user_id} not found")
+                    return {'success': False, 'error': 'User not found'}
+                
+                current_hash, salt = user_data
+                
+                # Verify current password
+                if not self.verify_password(current_password, current_hash, salt):
+                    logger.warning(f"Password change failed: incorrect current password for user {user_id}")
+                    return {'success': False, 'error': 'Current password is incorrect'}
+                
+                # Generate new password hash
+                new_hash, new_salt = self.generate_password_hash(new_password)
+                
+                # Update password
+                conn.execute(text('''
+                    UPDATE users SET password_hash = :new_hash, salt = :new_salt, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = :user_id
+                '''), {'new_hash': new_hash, 'new_salt': new_salt, 'user_id': user_id})
+                
+                conn.commit()
+                
+                logger.info(f"Password changed successfully for user ID: {user_id}")
+                return {'success': True}
+                
+        except Exception as e:
+            logger.error(f"Error changing password for user {user_id}: {e}")
+            return {'success': False, 'error': 'Error changing password. Please try again.'}
+
+    @log_function_call
+    def get_user_watchlist(self, user_id: int) -> list:
+        """Get user's watchlist with stock details"""
+        logger.debug(f"Getting watchlist for user ID: {user_id}")
+        
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('''
+                    SELECT 
+                        uw.symbol, uw.notes, uw.added_at,
+                        cp.companyname, cp.price, cp.sector,
+                        us.undervaluation_score,
+                        sc.name
+                    FROM user_watchlists uw
+                    LEFT JOIN company_profiles cp ON uw.symbol = cp.symbol
+                    LEFT JOIN undervaluation_scores us ON uw.symbol = us.symbol
+                    LEFT JOIN sp500_constituents sc ON uw.symbol = sc.symbol
+                    WHERE uw.user_id = :user_id
+                    ORDER BY uw.added_at DESC
+                '''), {'user_id': user_id})
+                
+                watchlist_data = result.fetchall()
+                
+                # Format watchlist data
+                watchlist = []
+                for row in watchlist_data:
+                    stock = {
+                        'symbol': row[0],
+                        'notes': row[1] or '',
+                        'added_at': row[2],
+                        'company_name': row[3] or row[7] or row[0],  # Use company profile name, or sp500 name, or symbol
+                        'price': row[4],
+                        'sector': row[5],
+                        'undervaluation_score': row[6]
+                    }
+                    watchlist.append(stock)
+                
+                return watchlist
+                
+        except Exception as e:
+            logger.error(f"Error getting watchlist for user {user_id}: {e}")
+            return []
+
+    @log_function_call
+    def add_to_watchlist(self, user_id: int, symbol: str, notes: str = '') -> dict:
+        """Add stock to user's watchlist"""
+        logger.debug(f"Adding {symbol} to watchlist for user ID: {user_id}")
+        
+        try:
+            with self.db_manager.engine.connect() as conn:
+                conn.execute(text('''
+                    INSERT INTO user_watchlists (user_id, symbol, notes)
+                    VALUES (:user_id, :symbol, :notes)
+                    ON CONFLICT (user_id, symbol) DO UPDATE SET
+                        notes = EXCLUDED.notes,
+                        added_at = CURRENT_TIMESTAMP
+                '''), {'user_id': user_id, 'symbol': symbol.upper(), 'notes': notes})
+                
+                conn.commit()
+                
+                logger.info(f"Added {symbol} to watchlist for user ID: {user_id}")
+                return {'success': True}
+                
+        except Exception as e:
+            logger.error(f"Error adding {symbol} to watchlist for user {user_id}: {e}")
+            return {'success': False, 'error': 'Error adding stock to watchlist'}
+
+    @log_function_call
+    def remove_from_watchlist(self, user_id: int, symbol: str) -> dict:
+        """Remove stock from user's watchlist"""
+        logger.debug(f"Removing {symbol} from watchlist for user ID: {user_id}")
+        
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('''
+                    DELETE FROM user_watchlists WHERE user_id = :user_id AND symbol = :symbol
+                '''), {'user_id': user_id, 'symbol': symbol.upper()})
+                
+                conn.commit()
+                
+                if result.rowcount > 0:
+                    logger.info(f"Removed {symbol} from watchlist for user ID: {user_id}")
+                    return {'success': True}
+                else:
+                    return {'success': False, 'error': 'Stock not found in watchlist'}
+                
+        except Exception as e:
+            logger.error(f"Error removing {symbol} from watchlist for user {user_id}: {e}")
+            return {'success': False, 'error': 'Error removing stock from watchlist'}
+
+    @log_function_call
+    def update_watchlist_notes(self, user_id: int, symbol: str, notes: str) -> dict:
+        """Update notes for a stock in user's watchlist"""
+        logger.debug(f"Updating notes for {symbol} in watchlist for user ID: {user_id}")
+        
+        try:
+            with self.db_manager.engine.connect() as conn:
+                result = conn.execute(text('''
+                    UPDATE user_watchlists SET notes = :notes WHERE user_id = :user_id AND symbol = :symbol
+                '''), {'notes': notes, 'user_id': user_id, 'symbol': symbol.upper()})
+                
+                conn.commit()
+                
+                if result.rowcount > 0:
+                    logger.info(f"Updated notes for {symbol} in watchlist for user ID: {user_id}")
+                    return {'success': True}
+                else:
+                    return {'success': False, 'error': 'Stock not found in watchlist'}
+                
+        except Exception as e:
+            logger.error(f"Error updating notes for {symbol} in watchlist for user {user_id}: {e}")
+            return {'success': False, 'error': 'Error updating notes'}
 
 # Flask decorators for authentication
 def login_required(f):

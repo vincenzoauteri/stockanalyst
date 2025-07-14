@@ -995,4 +995,177 @@ def api_get_unread_count():
         logger.error(f"Error in api_get_unread_count: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-logger.info("API v2 routes initialized with comprehensive endpoints including alerts system")
+# Short Squeeze Analysis Endpoints
+
+@api_v2.route('/squeeze/rankings', methods=['GET'])
+def api_get_squeeze_rankings():
+    """Get ranked list of short squeeze candidates"""
+    try:
+        service = get_stock_service()
+        
+        # Get query parameters with validation
+        try:
+            limit = request.args.get('limit', 50, type=int)
+            order_by = request.args.get('order_by', 'squeeze_score')
+            min_score = request.args.get('min_score', type=float)
+            min_data_quality = request.args.get('min_data_quality')
+            
+            # Validate parameters
+            if limit < 1 or limit > 500:
+                limit = 50
+            
+            valid_order_fields = ['squeeze_score', 'si_score', 'dtc_score', 'float_score', 'momentum_score']
+            if order_by not in valid_order_fields:
+                order_by = 'squeeze_score'
+            
+            valid_quality_levels = ['high', 'medium', 'low']
+            if min_data_quality and min_data_quality not in valid_quality_levels:
+                min_data_quality = None
+                
+        except ValueError as e:
+            logger.warning(f"Invalid query parameters in api_get_squeeze_rankings: {e}")
+            return jsonify({'success': False, 'error': 'Invalid query parameters'}), 400
+        
+        # Get rankings from service
+        rankings = service.get_short_squeeze_rankings(
+            limit=limit,
+            order_by=order_by,
+            min_score=min_score,
+            min_data_quality=min_data_quality
+        )
+        
+        # Serialize dates
+        rankings = serialize_dates_in_dict(rankings)
+        
+        return jsonify({
+            'success': True,
+            'data': rankings,
+            'count': len(rankings),
+            'filters': {
+                'limit': limit,
+                'order_by': order_by,
+                'min_score': min_score,
+                'min_data_quality': min_data_quality
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_squeeze_rankings: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/squeeze/stats', methods=['GET'])
+def api_get_squeeze_stats():
+    """Get summary statistics for short squeeze analysis"""
+    try:
+        service = get_stock_service()
+        stats = service.get_short_squeeze_summary_stats()
+        
+        return jsonify({
+            'success': True,
+            'data': stats
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_squeeze_stats: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/squeeze/short-interest', methods=['GET'])
+def api_get_all_short_interest():
+    """Get recent short interest data across all symbols"""
+    try:
+        service = get_stock_service()
+        
+        # Get query parameters
+        limit = request.args.get('limit', 100, type=int)
+        if limit < 1 or limit > 500:
+            limit = 100
+        
+        short_interest_data = service.get_all_short_interest_data(limit=limit)
+        
+        # Serialize dates
+        short_interest_data = serialize_dates_in_dict(short_interest_data)
+        
+        return jsonify({
+            'success': True,
+            'data': short_interest_data,
+            'count': len(short_interest_data),
+            'limit': limit
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_all_short_interest: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/stocks/<string:symbol>/squeeze', methods=['GET'])
+def api_get_stock_squeeze_analysis(symbol):
+    """Get comprehensive short squeeze analysis for a specific stock"""
+    try:
+        service = get_stock_service()
+        
+        # Get comprehensive squeeze data
+        squeeze_data = service.get_comprehensive_short_squeeze_data(symbol.upper())
+        
+        if not squeeze_data or 'error' in squeeze_data:
+            return jsonify({'success': False, 'error': 'Stock not found'}), 404
+        
+        # Serialize dates
+        squeeze_data = serialize_dates_in_dict(squeeze_data)
+        
+        return jsonify({
+            'success': True,
+            'data': squeeze_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_stock_squeeze_analysis for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/stocks/<string:symbol>/short-interest', methods=['GET'])
+def api_get_stock_short_interest(symbol):
+    """Get short interest data for a specific stock"""
+    try:
+        service = get_stock_service()
+        
+        short_interest = service.get_short_interest_data(symbol.upper())
+        
+        if not short_interest:
+            return jsonify({'success': False, 'error': 'No short interest data found'}), 404
+        
+        # Serialize dates
+        short_interest = serialize_dates_in_dict(short_interest)
+        
+        return jsonify({
+            'success': True,
+            'symbol': symbol.upper(),
+            'data': short_interest
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_stock_short_interest for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@api_v2.route('/stocks/<string:symbol>/squeeze-score', methods=['GET'])
+def api_get_stock_squeeze_score(symbol):
+    """Get short squeeze score for a specific stock"""
+    try:
+        service = get_stock_service()
+        
+        squeeze_score = service.get_short_squeeze_score(symbol.upper())
+        
+        if not squeeze_score:
+            return jsonify({'success': False, 'error': 'No squeeze score found'}), 404
+        
+        # Serialize dates
+        squeeze_score = serialize_dates_in_dict(squeeze_score)
+        
+        return jsonify({
+            'success': True,
+            'symbol': symbol.upper(),
+            'data': squeeze_score
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in api_get_stock_squeeze_score for {symbol}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+logger.info("API v2 routes initialized with comprehensive endpoints including alerts system and short squeeze analysis")

@@ -6,7 +6,7 @@ from datetime import date, timedelta
 # Mock the os.getenv for FMP_API_KEY before importing FMPClient
 @pytest.fixture(autouse=True)
 def mock_env_vars():
-    with patch.dict(os.environ, {'FMP_API_KEY': 'test_api_key', 'DATABASE_PATH': ':memory:'}):
+    with patch.dict(os.environ, {'FMP_API_KEY': 'test_api_key', }):
         yield
 
 # Import FMPClient after mocking env vars

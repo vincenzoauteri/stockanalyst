@@ -379,9 +379,53 @@ class DataFetcher:
         logger.info(f"Processed analyst recommendations for {processed_count} symbols")
         return processed_count
 
+    def fetch_short_interest_data(self, symbols: List[str], max_requests: int = 50) -> int:
+        """
+        Fetch short interest data for given symbols using Yahoo Finance
+        Returns number of symbols processed
+        """
+        logger.info(f"Fetching short interest data for {len(symbols)} symbols")
+        
+        if not hasattr(self.fmp_client, 'yahoo_client') or not self.fmp_client.yahoo_client:
+            logger.warning("Yahoo Finance client not available for short interest data")
+            return 0
+        
+        processed_count = 0
+        
+        for i, symbol in enumerate(symbols):
+            if i >= max_requests:
+                logger.info(f"Reached maximum request limit of {max_requests}")
+                break
+                
+            try:
+                logger.debug(f"Fetching short interest data for {symbol} ({i+1}/{len(symbols)})")
+                
+                # Get short interest data from Yahoo Finance
+                short_data = self.fmp_client.yahoo_client.get_short_interest_data(symbol)
+                
+                if short_data and any(v is not None for k, v in short_data.items() 
+                                    if k not in ['symbol', 'source', 'timestamp', 'report_date']):
+                    # Insert into database - remove timestamp and source fields for database storage
+                    db_data = {k: v for k, v in short_data.items() 
+                             if k not in ['timestamp', 'source']}
+                    self.db_manager.insert_short_interest_data(symbol, db_data)
+                    processed_count += 1
+                    logger.debug(f"Updated short interest data for {symbol}")
+                else:
+                    logger.debug(f"No short interest data found for {symbol}")
+                
+                # Rate limiting
+                time.sleep(self.rate_limit_delay)
+                
+            except Exception as e:
+                logger.error(f"Error fetching short interest data for {symbol}: {e}")
+        
+        logger.info(f"Processed short interest data for {processed_count} symbols")
+        return processed_count
+
     def fetch_all_new_data_types(self, symbols: List[str] = None, max_requests_per_type: int = 25) -> Dict[str, int]:
         """
-        Fetch all new data types (corporate actions, financial statements, analyst recommendations)
+        Fetch all new data types (corporate actions, financial statements, analyst recommendations, short interest)
         for given symbols or all S&P 500 symbols
         """
         if symbols is None:
@@ -393,6 +437,7 @@ class DataFetcher:
             'corporate_actions': 0,
             'financial_statements': 0,
             'analyst_recommendations': 0,
+            'short_interest': 0,
             'total_symbols': len(symbols)
         }
         
@@ -404,6 +449,9 @@ class DataFetcher:
         
         # Fetch analyst recommendations
         results['analyst_recommendations'] = self.fetch_analyst_recommendations(symbols, max_requests_per_type)
+        
+        # Fetch short interest data
+        results['short_interest'] = self.fetch_short_interest_data(symbols, max_requests_per_type)
         
         logger.info(f"Completed fetching new data types. Results: {results}")
         return results

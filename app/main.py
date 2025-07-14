@@ -57,14 +57,18 @@ class StockAnalyst:
             
             logger.info(f"Fetching profile for {symbol} ({i}/{len(symbols)})")
             
-            profile = self.fmp_client.get_company_profile(symbol)
-            if profile:
-                # Clean column names
-                cleaned_profile = {k.lower().replace(' ', '_'): v for k, v in profile.items()}
-                self.db_manager.insert_company_profile(cleaned_profile)
-                logger.info(f"Stored profile for {symbol}")
-            else:
-                logger.warning(f"No profile data for {symbol}")
+            try:
+                profile = self.fmp_client.get_company_profile(symbol)
+                if profile:
+                    # Clean column names
+                    cleaned_profile = {k.lower().replace(' ', '_'): v for k, v in profile.items()}
+                    self.db_manager.insert_company_profile(cleaned_profile)
+                    logger.info(f"Stored profile for {symbol}")
+                else:
+                    logger.warning(f"No profile data for {symbol}")
+            except Exception as e:
+                logger.error(f"Error fetching profile for {symbol}: {e}")
+                continue
             
             # Rate limiting from configuration
             time.sleep(self.config.FMP_RATE_LIMIT_DELAY)

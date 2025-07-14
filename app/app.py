@@ -8,10 +8,10 @@ Uses separate data access layer for better separation of concerns
 import json
 import os
 import signal
-import sqlite3
 import sys
 import threading
 from datetime import datetime, date
+from sqlalchemy import text
 
 # Try to import orjson for faster JSON processing
 try:
@@ -272,35 +272,6 @@ def stock_detail(symbol):
         logger.error(f"Error in stock_detail route for {symbol}: {e}")
         return render_template('error.html', error=str(e))
 
-@app.route('/sector/<sector_name>')
-def sector_detail(sector_name):
-    """Sector detail page showing all stocks in a sector"""
-    try:
-        service = get_stock_service()
-        
-        # Get all stocks in the sector
-        sector_stocks = service.get_stocks_by_sector(sector_name)
-        
-        if not sector_stocks:
-            return render_template('error.html', error=f"Sector {sector_name} not found")
-        
-        # Calculate sector statistics
-        total_stocks = len(sector_stocks)
-        stocks_with_scores = sum(1 for s in sector_stocks if s['undervaluation_score'] is not None)
-        avg_score = sum(s['undervaluation_score'] for s in sector_stocks if s['undervaluation_score'] is not None) / stocks_with_scores if stocks_with_scores > 0 else 0
-        
-        sector_stats = {
-            'name': sector_name,
-            'total_stocks': total_stocks,
-            'stocks_with_scores': stocks_with_scores,
-            'avg_undervaluation_score': round(avg_score, 2)
-        }
-        
-        return render_template('sector_detail.html', sector=sector_stats, stocks=sector_stocks)
-        
-    except Exception as e:
-        logger.error(f"Error in sector_detail route for {sector_name}: {e}")
-        return render_template('error.html', error=str(e))
 
 @app.route('/compare')
 def stock_comparison():
@@ -434,23 +405,6 @@ def api_sectors():
         logger.error(f"Error in api_sectors route: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/analysis')
-def analysis_page():
-    """Analysis page with undervaluation insights"""
-    try:
-        analyzer = get_undervaluation_analyzer()
-        
-        # Get cache statistics
-        cache_stats = analyzer.get_cache_stats()
-        
-        # Run analysis with cached data
-        summary = analyzer.analyze_undervaluation(use_cache=True)
-        
-        return render_template('analysis.html', summary=summary, cache_stats=cache_stats)
-        
-    except Exception as e:
-        logger.error(f"Error in analysis_page route: {e}")
-        return render_template('error.html', error=str(e))
 
 @app.route('/api/analysis/run', methods=['POST'])
 def api_run_analysis():
@@ -552,30 +506,25 @@ def logout():
 def profile():
     """User profile page"""
     try:
-        # Get user information
+        # Get user information using PostgreSQL
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Get user details
-        cursor.execute('''
-            SELECT created_at, last_login FROM users WHERE id = ?
-        ''', (session['user_id'],))
-        user_data = cursor.fetchone()
-        
-        # Get watchlist count
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_watchlists WHERE user_id = ?
-        ''', (session['user_id'],))
-        watchlist_count = cursor.fetchone()[0]
-        
-        conn.close()
+        with auth_mgr.db_manager.engine.connect() as conn:
+            # Get user details
+            result = conn.execute(text('''
+                SELECT created_at, last_login FROM users WHERE id = :user_id
+            '''), {'user_id': session['user_id']})
+            user_data = result.fetchone()
+            
+            # Get watchlist count
+            result = conn.execute(text('''
+                SELECT COUNT(*) FROM user_watchlists WHERE user_id = :user_id
+            '''), {'user_id': session['user_id']})
+            watchlist_count = result.fetchone()[0]
         
         user_info = {
-            'created_at': datetime.fromisoformat(user_data[0]) if user_data[0] else None,
-            'last_login': datetime.fromisoformat(user_data[1]) if user_data[1] else None
+            'created_at': user_data[0] if user_data and user_data[0] else None,
+            'last_login': user_data[1] if user_data and user_data[1] else None
         }
         
         return render_template('profile.html', user_info=user_info, watchlist_count=watchlist_count)
@@ -599,39 +548,12 @@ def change_password():
     
     try:
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
+        result = auth_mgr.change_password(session['user_id'], current_password, new_password)
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Get current user's password hash and salt
-        cursor.execute('SELECT password_hash, salt FROM users WHERE id = ?', (session['user_id'],))
-        user_data = cursor.fetchone()
-        
-        if not user_data:
-            flash('User not found', 'error')
-            return redirect(url_for('profile'))
-        
-        current_hash, salt = user_data
-        
-        # Verify current password
-        if not auth_mgr.verify_password(current_password, current_hash, salt):
-            flash('Current password is incorrect', 'error')
-            return redirect(url_for('profile'))
-        
-        # Generate new password hash
-        new_hash, new_salt = auth_mgr.generate_password_hash(new_password)
-        
-        # Update password
-        cursor.execute('''
-            UPDATE users SET password_hash = ?, salt = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', (new_hash, new_salt, session['user_id']))
-        
-        conn.commit()
-        conn.close()
-        
-        flash('Password changed successfully', 'success')
+        if result['success']:
+            flash('Password changed successfully', 'success')
+        else:
+            flash(result['error'], 'error')
         
     except Exception as e:
         logger.error(f"Error changing password: {e}")
@@ -645,43 +567,12 @@ def watchlist():
     """User's watchlist page"""
     try:
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
+        watchlist = auth_mgr.get_user_watchlist(session['user_id'])
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Get user's watchlist with stock details
-        cursor.execute('''
-            SELECT 
-                uw.symbol, uw.notes, uw.added_at,
-                cp.companyname, cp.price, cp.sector,
-                us.undervaluation_score,
-                sc.name
-            FROM user_watchlists uw
-            LEFT JOIN company_profiles cp ON uw.symbol = cp.symbol
-            LEFT JOIN undervaluation_scores us ON uw.symbol = us.symbol
-            LEFT JOIN sp500_constituents sc ON uw.symbol = sc.symbol
-            WHERE uw.user_id = ?
-            ORDER BY uw.added_at DESC
-        ''', (session['user_id'],))
-        
-        watchlist_data = cursor.fetchall()
-        conn.close()
-        
-        # Format watchlist data
-        watchlist = []
-        for row in watchlist_data:
-            stock = {
-                'symbol': row[0],
-                'notes': row[1],
-                'added_at': datetime.fromisoformat(row[2]) if row[2] else None,
-                'company_name': row[3],
-                'price': row[4],
-                'sector': row[5],
-                'undervaluation_score': row[6],
-                'name': row[7]
-            }
-            watchlist.append(stock)
+        # Convert datetime strings for template rendering
+        for stock in watchlist:
+            if stock.get('added_at') and isinstance(stock['added_at'], str):
+                stock['added_at'] = datetime.fromisoformat(stock['added_at'])
         
         return render_template('watchlist.html', watchlist=watchlist)
         
@@ -711,21 +602,12 @@ def add_to_watchlist():
             return redirect(url_for('watchlist'))
         
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
+        result = auth_mgr.add_to_watchlist(session['user_id'], symbol, notes)
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Add to watchlist
-        cursor.execute('''
-            INSERT OR REPLACE INTO user_watchlists (user_id, symbol, notes)
-            VALUES (?, ?, ?)
-        ''', (session['user_id'], symbol, notes))
-        
-        conn.commit()
-        conn.close()
-        
-        flash(f'{symbol} added to your watchlist', 'success')
+        if result['success']:
+            flash(f'{symbol} added to your watchlist', 'success')
+        else:
+            flash(result['error'], 'error')
         
     except Exception as e:
         logger.error(f"Error adding to watchlist: {e}")
@@ -745,19 +627,9 @@ def remove_from_watchlist():
     
     try:
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
+        result = auth_mgr.remove_from_watchlist(session['user_id'], symbol)
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            DELETE FROM user_watchlists WHERE user_id = ? AND symbol = ?
-        ''', (session['user_id'], symbol))
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True})
+        return jsonify(result)
         
     except Exception as e:
         logger.error(f"Error removing from watchlist: {e}")
@@ -776,19 +648,12 @@ def update_watchlist_notes():
     
     try:
         auth_mgr = get_auth_manager()
-        db_path = auth_mgr.db_path
+        result = auth_mgr.update_watchlist_notes(session['user_id'], symbol, notes)
         
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE user_watchlists SET notes = ? WHERE user_id = ? AND symbol = ?
-        ''', (notes, session['user_id'], symbol))
-        
-        conn.commit()
-        conn.close()
-        
-        flash(f'Notes updated for {symbol}', 'success')
+        if result['success']:
+            flash(f'Notes updated for {symbol}', 'success')
+        else:
+            flash(result['error'], 'error')
         
     except Exception as e:
         logger.error(f"Error updating watchlist notes: {e}")
@@ -1328,6 +1193,52 @@ def notifications():
     except Exception as e:
         logger.error(f"Error in notifications route: {e}")
         flash('Error loading notifications', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/squeeze')
+def short_squeeze_analysis():
+    """Short squeeze analysis dashboard"""
+    try:
+        service = get_stock_service()
+        
+        # Get query parameters for filtering
+        limit = request.args.get('limit', 50, type=int)
+        min_score = request.args.get('min_score', type=float)
+        min_data_quality = request.args.get('min_data_quality')
+        order_by = request.args.get('order_by', 'squeeze_score')
+        
+        # Validate parameters
+        if limit < 1 or limit > 200:
+            limit = 50
+        
+        valid_order_fields = ['squeeze_score', 'si_score', 'dtc_score', 'float_score', 'momentum_score']
+        if order_by not in valid_order_fields:
+            order_by = 'squeeze_score'
+        
+        # Get squeeze rankings
+        rankings = service.get_short_squeeze_rankings(
+            limit=limit,
+            order_by=order_by,
+            min_score=min_score,
+            min_data_quality=min_data_quality
+        )
+        
+        # Get summary statistics
+        stats = service.get_short_squeeze_summary_stats()
+        
+        return render_template('short_squeeze.html', 
+                             rankings=rankings,
+                             stats=stats,
+                             filters={
+                                 'limit': limit,
+                                 'min_score': min_score,
+                                 'min_data_quality': min_data_quality,
+                                 'order_by': order_by
+                             })
+        
+    except Exception as e:
+        logger.error(f"Error in short_squeeze_analysis route: {e}")
+        flash('Error loading short squeeze analysis', 'error')
         return redirect(url_for('index'))
 
 @app.errorhandler(404)

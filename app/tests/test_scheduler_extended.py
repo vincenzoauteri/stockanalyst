@@ -12,7 +12,7 @@ import os
 # Mock environment variables before importing
 @pytest.fixture(autouse=True)
 def mock_env_vars():
-    with patch.dict(os.environ, {'DATABASE_PATH': ':memory:'}):
+    with patch.dict(os.environ, {}):
         yield
 
 @pytest.fixture
@@ -48,6 +48,15 @@ def scheduler_instance(mock_scheduler_components):
     scheduler.fmp_client = mock_scheduler_components['fmp_client'].return_value
     scheduler.yahoo_client = mock_scheduler_components['yahoo_client'].return_value
     scheduler.db_manager = mock_scheduler_components['db_manager'].return_value
+    
+    # Reset status to known state for tests
+    scheduler.status = {
+        "running": False,
+        "pid": os.getpid(),
+        "last_successful_update": None,
+        "next_scheduled_run": None,
+        "consecutive_failures": 0,
+    }
     
     return scheduler
 

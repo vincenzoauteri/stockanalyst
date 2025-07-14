@@ -43,14 +43,15 @@ def test_database_schema():
                     logger.info(f"✓ Table '{table}' exists with {count} records")
                 except Exception as e:
                     logger.error(f"✗ Table '{table}' failed: {e}")
-                    return False
+                    assert False, f"Table '{table}' failed: {e}"
         
         logger.info("✓ Database schema test passed")
-        return True
+        # All tables exist and are accessible
+        assert True
         
     except Exception as e:
         logger.error(f"✗ Database schema test failed: {e}")
-        return False
+        assert False, f"Database schema test failed: {e}"
 
 def test_yahoo_finance_client():
     """Test Yahoo Finance client with new methods"""
@@ -88,11 +89,12 @@ def test_yahoo_finance_client():
             logger.warning(f"⚠ Analyst recommendations: No data returned for {symbol}")
         
         logger.info("✓ Yahoo Finance client test completed")
-        return True
+        # All Yahoo Finance operations successful
+        assert True
         
     except Exception as e:
         logger.error(f"✗ Yahoo Finance client test failed: {e}")
-        return False
+        assert False, f"Yahoo Finance client test failed: {e}"
 
 def test_data_access_layer():
     """Test data access layer methods"""
@@ -128,11 +130,12 @@ def test_data_access_layer():
         logger.info(f"✓ Financial summary: {len(summary)} keys in response")
         
         logger.info("✓ Data access layer test completed")
-        return True
+        # All data access operations successful
+        assert True
         
     except Exception as e:
         logger.error(f"✗ Data access layer test failed: {e}")
-        return False
+        assert False, f"Data access layer test failed: {e}"
 
 def test_data_collection():
     """Test data collection for a small sample"""
@@ -157,11 +160,12 @@ def test_data_collection():
         logger.info(f"✓ Analyst recommendations: {result3} symbols processed")
         
         logger.info("✓ Data collection test completed")
-        return True
+        # All data collection operations successful
+        assert True
         
     except Exception as e:
         logger.error(f"✗ Data collection test failed: {e}")
-        return False
+        assert False, f"Data collection test failed: {e}"
 
 def main():
     """Run all tests"""
@@ -179,10 +183,11 @@ def main():
     
     for test_name, test_func in tests:
         logger.info(f"\n--- Testing {test_name} ---")
-        if test_func():
+        try:
+            test_func()
             passed += 1
-        else:
-            logger.error(f"Test '{test_name}' failed!")
+        except (AssertionError, Exception) as e:
+            logger.error(f"Test '{test_name}' failed: {e}")
     
     logger.info(f"\n=== Test Results: {passed}/{total} tests passed ===")
     

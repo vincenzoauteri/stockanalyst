@@ -49,11 +49,8 @@ class WebAppLauncher:
         from unified_config import BaseConfig
         BaseConfig.validate_and_exit_on_error()
         
-        db_path = os.getenv('DATABASE_PATH', 'stock_analysis.db')
-        if os.path.exists(db_path):
-            self.logger.info(f"   ✅ Database found at {db_path}")
-        else:
-            self.logger.warning(f"   ⚠️ Database not found at {db_path}")
+        # Database configuration validated by DatabaseManager
+        self.logger.info("   ✅ Using PostgreSQL database configuration")
             
         api_key = os.getenv('FMP_API_KEY')
         if api_key:
@@ -82,7 +79,7 @@ class WebAppLauncher:
     def _print_development_info(self, host, port):
         """Print development information and tips"""
         print()
-        print("📊 Features available:")
+        print("📊 Features available (HOT RELOAD TEST - WEBAPP FINAL):")
         print("   • S&P 500 stock listing with search & filtering")
         print("   • Individual stock detail pages with fundamentals")
         print("   • Sector-based analysis and grouping")
@@ -112,7 +109,7 @@ class WebAppLauncher:
                 debug=True,
                 host=host,
                 port=port,
-                use_reloader=False
+                use_reloader=True
             )
             
         except KeyboardInterrupt:

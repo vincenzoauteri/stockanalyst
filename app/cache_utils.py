@@ -94,7 +94,7 @@ def serialize_for_cache(obj: Any) -> str:
         # orjson is faster and handles datetime objects natively
         try:
             # orjson returns bytes, so decode to string
-            return orjson.dumps(obj, option=orjson.OPT_SORT_KEYS | orjson.OPT_SERIALIZE_DATETIME).decode('utf-8')
+            return orjson.dumps(obj, option=orjson.OPT_SORT_KEYS | orjson.OPT_PASSTHROUGH_DATETIME).decode('utf-8')
         except (TypeError, ValueError):
             # Fall back to standard json if orjson fails
             pass

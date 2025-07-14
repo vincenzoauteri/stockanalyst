@@ -12,7 +12,7 @@ import os
 # Mock environment variables before importing
 @pytest.fixture(autouse=True)
 def mock_env_vars():
-    with patch.dict(os.environ, {'DATABASE_PATH': ':memory:'}):
+    with patch.dict(os.environ, {}):
         yield
 
 from yfinance_undervaluation_calculator import YFinanceUndervaluationCalculator
@@ -183,9 +183,20 @@ class TestYFinanceUndervaluationCalculator:
             'sector': 'Technology'
         }
         
+        sample_ratios = {
+            'pe_ratio': 25.0,
+            'pb_ratio': 3.0,
+            'ps_ratio': 6.8,
+            'roe': 0.20,
+            'roa': 0.10,
+            'debt_to_equity': 0.4,
+            'current_ratio': 1.8,
+            'beta': 1.2
+        }
+        
         with patch.object(calculator, 'get_financial_data', return_value=sample_data), \
-             patch.object(calculator, 'calculate_financial_ratios', return_value={'pe_ratio': 25.0}), \
-             patch.object(calculator, 'get_sector_averages', return_value={'pe_ratio': 30.0}):
+             patch.object(calculator, 'calculate_financial_ratios', return_value=sample_ratios), \
+             patch.object(calculator, 'get_sector_averages', return_value={'avg_pe': 30.0, 'avg_pb': 3.0, 'avg_ps': 5.0, 'avg_roe': 0.15, 'avg_roa': 0.08, 'avg_debt_to_equity': 0.5, 'avg_current_ratio': 1.5, 'avg_beta': 1.0}):
             
             result = calculator.calculate_undervaluation_score('AAPL')
             
@@ -208,8 +219,15 @@ class TestYFinanceUndervaluationCalculator:
         
         score_data = {
             'symbol': 'AAPL',
+            'sector': 'Technology',
             'undervaluation_score': 75.5,
+            'valuation_score': 65.0,
+            'quality_score': 80.0,
+            'strength_score': 75.0,
+            'risk_score': 70.0,
             'data_quality': 'high',
+            'price': 150.0,
+            'market_cap': 2500000000000,
             'calculated_at': datetime.now()
         }
         
@@ -238,9 +256,9 @@ class TestYFinanceUndervaluationCalculator:
             result = calculator.calculate_all_scores(limit=2)
             
             assert isinstance(result, dict)
-            assert 'processed' in result
-            assert 'errors' in result
-            assert result['processed'] == 2
+            assert 'total_processed' in result
+            assert 'failed' in result
+            assert result['total_processed'] == 2
 
     def test_calculate_all_scores_with_limit(self, calculator):
         """Test calculating scores with a limit"""
@@ -259,7 +277,7 @@ class TestYFinanceUndervaluationCalculator:
             
             result = calculator.calculate_all_scores(limit=1)
             
-            assert result['processed'] == 1
+            assert result['total_processed'] == 1
 
     def test_error_handling_in_financial_data(self, calculator):
         """Test error handling when getting financial data"""

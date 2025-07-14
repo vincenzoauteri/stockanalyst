@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 from datetime import datetime, date
 
 # Import the client after setting up mocks if needed, though for yfinance it's often fine directly
@@ -54,9 +54,9 @@ def mock_ticker_info():
 
 @pytest.fixture
 def mock_ticker_history():
-    # Mock data for yf.Ticker().history()
+    # Mock data for yf.Ticker().history() - dates should be in index like real yfinance
+    dates = pd.to_datetime(['2023-01-01', '2023-01-02', '2023-01-03'])
     return pd.DataFrame({
-        'Date': pd.to_datetime(['2023-01-01', '2023-01-02', '2023-01-03']),
         'Open': [100.0, 101.0, 102.0],
         'High': [102.0, 103.0, 104.0],
         'Low': [99.0, 100.0, 101.0],
@@ -64,7 +64,7 @@ def mock_ticker_history():
         'Volume': [100000, 120000, 110000],
         'Dividends': [0.0, 0.0, 0.0],
         'Stock Splits': [0.0, 0.0, 0.0]
-    })
+    }, index=dates)
 
 @patch('yfinance.Ticker')
 def test_get_quote_success(mock_yf_ticker, yahoo_client, mock_ticker_info):
@@ -145,8 +145,8 @@ def test_get_historical_prices_success(mock_yf_ticker, yahoo_client, mock_ticker
     df = yahoo_client.get_historical_prices('AAPL', period="1y")
     assert not df.empty
     assert len(df) == 3
-    assert df.iloc[0]['date'] == date(2023, 1, 1)
-    assert df.iloc[2]['close'] == 103.0
+    assert df.at[0, 'date'] == date(2023, 1, 1)
+    assert df.at[2, 'close'] == 103.0
     assert 'adjclose' not in df.columns # Ensure only required columns are present
 
 @patch('yfinance.Ticker')
@@ -163,6 +163,9 @@ def test_is_available(mock_get_quote, yahoo_client):
     mock_get_quote.return_value = {'price': 100.0}
     assert yahoo_client.is_available()
 
+    # Clear cache to test fresh availability check
+    yahoo_client._availability_cache = None
+    yahoo_client._availability_cache_time = None
     mock_get_quote.return_value = None
     assert not yahoo_client.is_available()
 
@@ -194,7 +197,8 @@ def test_get_quote_exception_handling(mock_yf_ticker, yahoo_client):
     """Test quote retrieval with yfinance exceptions"""
     mock_ticker_instance = MagicMock()
     mock_yf_ticker.return_value = mock_ticker_instance
-    mock_ticker_instance.info = MagicMock(side_effect=Exception("Network error"))
+    # Make the .info property raise an exception
+    type(mock_ticker_instance).info = PropertyMock(side_effect=Exception("Network error"))
     
     quote = yahoo_client.get_quote('AAPL')
     assert quote is None
@@ -233,7 +237,7 @@ def test_get_company_profile_partial_data(mock_yf_ticker, yahoo_client):
     assert profile['symbol'] == 'PARTIAL'
     assert profile['companyname'] == 'Partial Data Company'
     assert profile['sector'] == 'Technology'
-    assert profile.get('description', '') == ''  # Should handle missing description
+    assert profile.get('description') is None  # Should handle missing description
 
 @patch('yfinance.Ticker')
 def test_get_historical_prices_with_start_end_dates(mock_yf_ticker, yahoo_client):
@@ -259,7 +263,7 @@ def test_get_historical_prices_with_start_end_dates(mock_yf_ticker, yahoo_client
     
     assert not df.empty
     assert len(df) == 2
-    mock_ticker_instance.history.assert_called_once_with(start=start_date, end=end_date)
+    mock_ticker_instance.history.assert_called_once_with(start=start_date, end=end_date, interval='1d')
 
 @patch('yfinance.Ticker')
 def test_get_historical_prices_exception_handling(mock_yf_ticker, yahoo_client):
@@ -345,10 +349,16 @@ def test_is_available_service_check(yahoo_client):
         mock_get_quote.return_value = {'price': 100.0}
         assert yahoo_client.is_available() is True
         
+        # Clear cache to test fresh availability check
+        yahoo_client._availability_cache = None
+        yahoo_client._availability_cache_time = None
         # Test when service is unavailable
         mock_get_quote.return_value = None
         assert yahoo_client.is_available() is False
         
+        # Clear cache again
+        yahoo_client._availability_cache = None
+        yahoo_client._availability_cache_time = None
         # Test when price is None (service responding but no data)
         mock_get_quote.return_value = {'price': None}
         assert yahoo_client.is_available() is False

@@ -422,6 +422,10 @@ class YFinanceUndervaluationCalculator:
             'company_count': 0
         }
     
+    def calculate_undervaluation_score(self, symbol: str) -> Optional[Dict]:
+        """Calculate undervaluation score for a single symbol (alias for calculate_relative_score)"""
+        return self.calculate_relative_score(symbol)
+
     def calculate_relative_score(self, symbol: str) -> Optional[Dict]:
         """Calculate undervaluation score for a single symbol"""
         try:

@@ -7,6 +7,7 @@ Uses yfinance library for free access to Yahoo Finance data
 
 import logging
 import pandas as pd
+import numpy as np
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
@@ -24,6 +25,36 @@ class YahooFinanceClient:
         self._availability_cache = None
         self._availability_cache_time = None
         self._cache_duration = 300  # 5 minutes cache
+
+    def _safe_float(self, value) -> Optional[float]:
+        """Safely convert value to float, handling strings and invalid values"""
+        if value is None:
+            return None
+        try:
+            if isinstance(value, str):
+                if value.strip() == '':
+                    return None
+                value = float(value)
+            if pd.isna(value) or not np.isfinite(value):
+                return None
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    def _safe_int(self, value) -> Optional[int]:
+        """Safely convert value to int, handling strings and invalid values"""
+        if value is None:
+            return None
+        try:
+            if isinstance(value, str):
+                if value.strip() == '':
+                    return None
+                value = float(value)  # Convert string to float first, then to int
+            if pd.isna(value) or not np.isfinite(value):
+                return None
+            return int(value)
+        except (ValueError, TypeError):
+            return None
 
     def _get_ticker(self, symbol: str) -> Optional[yf.Ticker]:
         """
@@ -51,29 +82,29 @@ class YahooFinanceClient:
                 logger.warning(f"No yfinance .info data found for {symbol}")
                 return None
 
-            # Build standardized response similar to FMP format
+            # Build standardized response similar to FMP format with safe type conversion
             result = {
                 'symbol': symbol,
-                'price': info.get('currentPrice') or info.get('regularMarketPrice'),
-                'market_cap': info.get('marketCap'),
-                'beta': info.get('beta'),
-                'pe_ratio': info.get('trailingPE'),
-                'forward_pe': info.get('forwardPE'),
-                'price_to_book': info.get('priceToBook'),
-                'price_to_sales': info.get('priceToSalesTrailing12Months'),
-                'roe': info.get('returnOnEquity'),
-                'roa': info.get('returnOnAssets'),
-                'debt_to_equity': info.get('debtToEquity'),
-                'current_ratio': info.get('currentRatio'),
-                'revenue_growth': info.get('revenueGrowth'),
-                'profit_margins': info.get('profitMargins'),
-                'gross_margins': info.get('grossMargins'),
-                'free_cash_flow': info.get('freeCashflow'),
-                'volume': info.get('regularMarketVolume'),
-                'avg_volume': info.get('averageVolume'),
-                'fifty_two_week_high': info.get('fiftyTwoWeekHigh'),
-                'fifty_two_week_low': info.get('fiftyTwoWeekLow'),
-                'dividend_yield': info.get('dividendYield'),
+                'price': self._safe_float(info.get('currentPrice') or info.get('regularMarketPrice')),
+                'market_cap': self._safe_int(info.get('marketCap')),
+                'beta': self._safe_float(info.get('beta')),
+                'pe_ratio': self._safe_float(info.get('trailingPE')),
+                'forward_pe': self._safe_float(info.get('forwardPE')),
+                'price_to_book': self._safe_float(info.get('priceToBook')),
+                'price_to_sales': self._safe_float(info.get('priceToSalesTrailing12Months')),
+                'roe': self._safe_float(info.get('returnOnEquity')),
+                'roa': self._safe_float(info.get('returnOnAssets')),
+                'debt_to_equity': self._safe_float(info.get('debtToEquity')),
+                'current_ratio': self._safe_float(info.get('currentRatio')),
+                'revenue_growth': self._safe_float(info.get('revenueGrowth')),
+                'profit_margins': self._safe_float(info.get('profitMargins')),
+                'gross_margins': self._safe_float(info.get('grossMargins')),
+                'free_cash_flow': self._safe_int(info.get('freeCashflow')),
+                'volume': self._safe_int(info.get('regularMarketVolume')),
+                'avg_volume': self._safe_int(info.get('averageVolume')),
+                'fifty_two_week_high': self._safe_float(info.get('fiftyTwoWeekHigh')),
+                'fifty_two_week_low': self._safe_float(info.get('fiftyTwoWeekLow')),
+                'dividend_yield': self._safe_float(info.get('dividendYield')),
                 'source': 'yahoo_finance',
                 'timestamp': datetime.now().isoformat()
             }
@@ -117,8 +148,9 @@ class YahooFinanceClient:
                 'zip': info.get('zip'),
                 'currency': info.get('currency'),
                 'exchange': info.get('exchange'),
-                'price': info.get('currentPrice') or info.get('regularMarketPrice'),
-                'mktcap': info.get('marketCap')
+                'price': self._safe_float(info.get('currentPrice') or info.get('regularMarketPrice')),
+                'mktcap': self._safe_int(info.get('marketCap')),
+                'source': 'yahoo_finance'
             }
             
             logger.info(f"Successfully retrieved Yahoo Finance profile for {symbol}")
@@ -159,41 +191,56 @@ class YahooFinanceClient:
         
         return fundamentals
     
-    def get_historical_prices(self, symbol: str, period: str = "1y") -> Optional[pd.DataFrame]:
+    def get_historical_prices(self, symbol: str, period: str = "1y", start=None, end=None) -> Optional[pd.DataFrame]:
         """
         Get historical price data using yfinance.
+        Args:
+            symbol: Stock symbol
+            period: Time period (used if start/end not provided)
+            start: Start date for historical data
+            end: End date for historical data
         """
-        logger.info(f"Getting Yahoo Finance historical data for {symbol} for period {period}")
+        logger.info(f"Getting Yahoo Finance historical data for {symbol}")
         ticker = self._get_ticker(symbol)
         if not ticker:
             return None
 
         try:
-            hist = ticker.history(period=period, interval="1d")
+            # Use start/end if provided, otherwise use period
+            if start is not None or end is not None:
+                hist = ticker.history(start=start, end=end, interval="1d")
+            else:
+                hist = ticker.history(period=period, interval="1d")
             
             if hist.empty:
                 logger.warning(f"No historical data found for {symbol} for period {period}")
                 return None
 
-            # Reset index to make 'Date' a column
+            # Reset index to make date a column
             hist = hist.reset_index()
             
             # Rename columns to match the previous format
-            hist.rename(columns={
+            column_mapping = {
                 'Date': 'date',
+                'index': 'date',  # Sometimes reset_index creates 'index' column
                 'Open': 'open',
                 'High': 'high',
                 'Low': 'low',
                 'Close': 'close',
                 'Volume': 'volume'
-            }, inplace=True)
+            }
+            # Only rename columns that exist
+            existing_renames = {k: v for k, v in column_mapping.items() if k in hist.columns}
+            hist.rename(columns=existing_renames, inplace=True)
 
             # Convert 'date' to date object if it's a datetime object
-            if pd.api.types.is_datetime64_any_dtype(hist['date']):
+            if 'date' in hist.columns and pd.api.types.is_datetime64_any_dtype(hist['date']):
                 hist['date'] = hist['date'].dt.date
 
-            # Select only the required columns
-            df = hist[['date', 'open', 'high', 'low', 'close', 'volume']]
+            # Select only the required columns that exist
+            required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
+            available_cols = [col for col in required_cols if col in hist.columns]
+            df = hist[available_cols]
             
             # Clean up null values
             df = df.dropna()
@@ -461,4 +508,49 @@ class YahooFinanceClient:
             
         except Exception as e:
             logger.error(f"Error getting analyst recommendations for {symbol}: {e}")
+            return None
+    
+    def get_short_interest_data(self, symbol: str) -> Optional[Dict]:
+        """
+        Get short interest data for a symbol using yfinance.
+        
+        Returns:
+            Dict containing short interest information or None if unavailable
+        """
+        logger.info(f"Getting short interest data for {symbol}")
+        
+        # Add rate limiting delay
+        time.sleep(self.request_delay)
+        
+        ticker = self._get_ticker(symbol)
+        if not ticker:
+            return None
+
+        try:
+            info = ticker.info
+            if info is None:
+                logger.warning(f"No yfinance .info data found for {symbol}")
+                return None
+
+            # Extract short interest fields from ticker.info
+            short_data = {
+                'symbol': symbol,
+                'report_date': datetime.now().date(),  # Yahoo doesn't provide exact report date
+                'short_interest': self._safe_int(info.get('sharesShort')),
+                'float_shares': self._safe_int(info.get('floatShares')),
+                'short_ratio': self._safe_float(info.get('shortRatio')),
+                'short_percent_of_float': self._safe_float(info.get('shortPercentOfFloat')),
+                'average_daily_volume': self._safe_int(info.get('averageDailyVolume10Day') or info.get('averageVolume')),
+                'source': 'yahoo_finance',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Log data quality
+            non_null_fields = sum(1 for v in short_data.values() if v is not None and v != symbol)
+            logger.info(f"Retrieved short interest data for {symbol} ({non_null_fields}/7 fields populated)")
+            
+            return short_data
+            
+        except Exception as e:
+            logger.error(f"Error getting short interest data for {symbol}: {e}")
             return None

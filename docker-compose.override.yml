@@ -1,0 +1,26 @@
+services:
+  # Override scheduler command for development with hot reloading
+  scheduler:
+    command: ["hupper", "-m", "scheduler", "run-internal"]
+    
+  # Override test scheduler command for development with hot reloading  
+  test-scheduler:
+    command: ["hupper", "-m", "scheduler", "run-internal"]
+    
+  # Override test webapp for development mode with hot reloading
+  test-webapp:
+    command: ["python", "webapp_launcher.py", "--mode", "development"]
+    environment:
+      - FLASK_ENV=development
+      - FLASK_HOST=0.0.0.0
+    depends_on:
+      - selenium-chrome
+
+  selenium-chrome:
+    image: selenium/standalone-chrome:latest
+    shm_size: 2g
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+    networks:
+      - stockanalyst-test-network

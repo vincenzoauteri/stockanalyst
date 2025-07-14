@@ -7,7 +7,7 @@ import os
 @pytest.fixture(autouse=True)
 def mock_env_vars():
     with patch.dict(os.environ, {
-        'DATABASE_PATH': ':memory:',
+        
         'FMP_API_KEY': 'test_fmp_key'
     }):
         yield

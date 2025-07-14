@@ -46,6 +46,8 @@ frozendict==2.4.6
     # via yfinance
 greenlet==3.2.3
     # via sqlalchemy
+hupper==1.12.1
+    # via -r requirements.in
 idna==3.10
     # via requests
 importlib-resources==6.5.2
@@ -160,3 +162,4 @@ yfinance==0.2.65
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
+selenium==4.22.0

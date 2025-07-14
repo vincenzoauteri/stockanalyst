@@ -22,6 +22,7 @@ from process_manager import EnhancedProcessManager
 try:
     from daily_updater import DailyUpdater
     from data_access_layer import StockDataService
+    from data_fetcher import DataFetcher
     from fmp_client import FMPClient
     from yahoo_finance_client import YahooFinanceClient
     from gap_detector import GapDetector
@@ -56,6 +57,7 @@ class Scheduler:
             self.db_manager = DatabaseManager()
             self.daily_updater = DailyUpdater()
             self.gap_detector = GapDetector()
+            self.data_fetcher = DataFetcher()
             self.fmp_client = FMPClient()
             self.yahoo_client = YahooFinanceClient()
             self.status = {
@@ -66,6 +68,7 @@ class Scheduler:
                 "consecutive_failures": 0,
             }
             self._running = True
+            self._load_status()
         except Exception as e:
             logger.error(f"Failed to initialize scheduler: {e}", exc_info=True)
             raise
@@ -80,6 +83,7 @@ class Scheduler:
         schedule.every().day.at("04:00").do(self.run_daily_update)
         schedule.every(4).hours.do(self.run_health_check)
         schedule.every(1).hour.do(self.run_catchup_operation)
+        schedule.every().sunday.at("02:00").do(self.run_weekly_short_interest_update)
 
         # Run initial catchup if gaps are detected
         logger.info("Checking for gaps at startup...")
@@ -112,6 +116,7 @@ class Scheduler:
         """Stops the scheduler gracefully."""
         logger.info("Requesting scheduler to stop...")
         self._running = False
+        self.status["running"] = False
 
     def run_daily_update(self):
         start_time = time.time()
@@ -381,6 +386,16 @@ class Scheduler:
             logger.error(f"Error getting already processed gaps: {e}")
             return set()
 
+    def _load_status(self):
+        """Load the scheduler status from file."""
+        try:
+            if STATUS_FILE.exists():
+                with open(STATUS_FILE, 'r') as f:
+                    saved_status = json.load(f)
+                    self.status.update(saved_status)
+        except (IOError, json.JSONDecodeError) as e:
+            logger.warning(f"Could not load scheduler status from {STATUS_FILE}: {e}")
+
     def _save_status(self):
         """Saves the current scheduler status to a file."""
         self.status['last_updated'] = datetime.now().isoformat()
@@ -391,6 +406,50 @@ class Scheduler:
                 json.dump(self.status, f, indent=4)
         except (IOError, TypeError) as e:
             logger.warning(f"Could not save scheduler status to {STATUS_FILE}: {e}")
+
+    def run_weekly_short_interest_update(self):
+        """Run weekly short interest data collection for all S&P 500 symbols"""
+        log_background_task("Weekly Short Interest Update", "STARTED")
+        logger.info("Starting weekly short interest data collection...")
+        start_time = datetime.now()
+        
+        try:
+            # Get all S&P 500 symbols
+            symbols = self.db_manager.get_sp500_symbols()
+            logger.info(f"Collecting short interest data for {len(symbols)} symbols")
+            
+            # Fetch short interest data with reasonable batch size
+            result = self.data_fetcher.fetch_short_interest_data(symbols, max_requests=250)
+            
+            duration = (datetime.now() - start_time).total_seconds()
+            
+            if result > 0:
+                log_background_task("Weekly Short Interest Update", "COMPLETED", duration=duration)
+                logger.info(f"Weekly short interest update completed successfully. Updated {result} symbols.")
+                # Update status
+                self.status["last_short_interest_update"] = datetime.now().isoformat()
+                self.status["short_interest_symbols_updated"] = result
+            else:
+                log_background_task("Weekly Short Interest Update", "COMPLETED", duration=duration, 
+                                  details="No short interest data collected")
+                logger.warning("Weekly short interest update completed but no data was collected.")
+                
+        except Exception as e:
+            duration = (datetime.now() - start_time).total_seconds()
+            log_background_task("Weekly Short Interest Update", "FAILED", duration=duration, 
+                              details=str(e))
+            logger.error(f"An exception occurred during the weekly short interest update: {e}", exc_info=True)
+        finally:
+            self._save_status()
+
+    def start(self):
+        """Start the scheduler in a background thread (for testing)."""
+        import threading
+        if not self.status.get("running", False):
+            self.status["running"] = True
+            thread = threading.Thread(target=self.run_forever, daemon=True)
+            thread.start()
+            self._save_status()
 
 # --- CLI and Service Management ---
 service_manager = EnhancedProcessManager(
@@ -472,7 +531,7 @@ def run_scheduler_process():
         LOG_FILE.parent.mkdir(exist_ok=True)
         setup_logging(log_level="INFO", log_dir=LOG_FILE.parent, enable_console_logging=True)
         
-        logger.info("Starting scheduler process...")
+        logger.info("Starting scheduler process (HOT RELOAD TEST - FINAL)...")
         scheduler = Scheduler()
         logger.info("Scheduler instance created successfully")
         

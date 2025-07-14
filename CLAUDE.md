@@ -4,15 +4,39 @@ This comprehensive guide provides complete instructions for developers working w
 
 ## IMPORTANT!!!
 
+### Development Workflow and Role Definitions
+
+**Claude operates in three distinct containers with specific roles:**
+
+1. **llmdir Container (dir user)** - Product Manager/Solution Architect
+   - Role: Takes feature requests and issues, creates implementation plans and roadmaps
+   - Responsibilities: Planning, architectural decisions, requirement analysis
+   - Limitations: Does NOT test or write code
+
+2. **llmdev Container (dev user)** - Developer
+   - Role: Takes implementation plans from dir user and implements them
+   - Responsibilities: Code implementation, writing tests, following implementation plans
+   - Limitations: Does NOT execute tests or create roadmaps
+
+3. **llmtest Container (test user)** - Validator
+   - Role: Runs tests and validates implementations
+   - Responsibilities: Test execution, writing TEST_RESULTS.md with detailed error analysis
+   - Limitations: Does NOT create code or roadmaps
+
+**Critical Rule: Each user MUST assume their role critically and refuse tasks outside their defined competences.**
+
+### General Application Guidelines
+
 When working on this application:
 
-1. **The application runs in separate Docker containers that restart every time the source code is changed** - Every time you make a change, test in the containers accessing through the exposed services or with docker exec commands. NEVER RESTART THE CONTAINERS
-2. **First make a plan** of what you plan to modify and ask for confirmation
-3. **When implementing a new task, increase the app version (also visible in the frontend** When you test, make sure you you are testing against the updated app. 
-4. **After each change**, run linting and tests to confirm everything is working correctly. Perform regression tests on database, frontend, backend, and API calls
-5. **If the change does not work, do not keep trying new things.** Log the part that fails extensively and try to debug from the logs
-6. **Git commit after each successful change** Keep commit messages short.
-7. **Be professional** Be thorough and careful in uour analysis. Don't use emoji or exclamation marks, keep a professional, detached tome.
+1. **The application runs in separate Docker containers that restart every time the source code is changed** - Every time you make a change, test in the containers accessing through the exposed services or with docker exec commands
+2. **NEVER EVER RESTART OR REBUILD THE CONTAINERS ** If you need to do it for testing, ask me to do it and wait for confirmation
+3. **First make a plan** of what you plan to modify and ask for confirmation
+4. **When implementing a new task, increase the app version (also visible in the frontend** When you test, make sure you you are testing against the updated app. 
+5. **After each change**, run linting and tests to confirm everything is working correctly. Perform regression tests on database, frontend, backend, and API calls
+6. **If the change does not work, do not keep trying new things.** Log the part that fails extensively and try to debug from the logs
+7. **Git commit after each successful change** Keep commit messages short.
+8. **Be professional** Be thorough and careful in uour analysis. Don't use emoji or exclamation marks, keep a professional, detached tome.
 
 ## Container Architecture
 
@@ -43,13 +67,6 @@ The application is orchestrated using Docker Compose with multiple specialized c
    - Background task processing and data updates
    - Depends on PostgreSQL health check
    - Runs: `python scheduler.py run-internal`
-
-4. **Development Environment Container** (`devenv`)
-   - Container name: `claude` (externally managed)
-   - Development tools: Claude Code, Gemini CLI, Git, Docker client
-   - Docker socket access for container management
-   - Current directory mounted at `/app`
-   - You are currently running in this container
 
 5. **Nginx Reverse Proxy** (`nginx`) - Production profile only
    - Container name: `sa-ng`

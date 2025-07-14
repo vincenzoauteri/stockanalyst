@@ -45,6 +45,9 @@
                 <a href="{{ url_for('corporate_actions') }}?symbol={{ stock.basic_info.symbol }}" class="btn btn-outline-secondary">
                     <i class="fas fa-building me-1"></i>Corporate Actions
                 </a>
+                <button class="btn btn-outline-danger" onclick="showShortSqueezeModal('{{ stock.basic_info.symbol }}')">
+                    <i class="fas fa-compress-arrows-alt me-1"></i>Short Squeeze
+                </button>
             </div>
         </div>
     </div>
@@ -1132,5 +1135,190 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize chart with default period
     loadChart('1y', 'line');
 });
+
+// Short Squeeze Modal Functions
+function showShortSqueezeModal(symbol) {
+    fetch(`/api/v2/stocks/${symbol}/squeeze`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                populateShortSqueezeModal(data.data);
+                const modal = new bootstrap.Modal(document.getElementById('shortSqueezeModal'));
+                modal.show();
+            } else {
+                alert('Error loading short squeeze data: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error loading short squeeze data');
+        });
+}
+
+function populateShortSqueezeModal(data) {
+    const modal = document.getElementById('shortSqueezeModal');
+    
+    // Update modal title
+    modal.querySelector('.modal-title').textContent = `Short Squeeze Analysis - ${data.symbol}`;
+    
+    // Get elements
+    const squeezeScore = modal.querySelector('#squeeze-score');
+    const siScore = modal.querySelector('#si-score');
+    const dtcScore = modal.querySelector('#dtc-score');
+    const floatScore = modal.querySelector('#float-score');
+    const momentumScore = modal.querySelector('#momentum-score');
+    const dataQuality = modal.querySelector('#data-quality');
+    const shortPercent = modal.querySelector('#short-percent');
+    const shortRatio = modal.querySelector('#short-ratio');
+    const floatShares = modal.querySelector('#float-shares');
+    const rsi = modal.querySelector('#rsi');
+    const relativeVolume = modal.querySelector('#relative-volume');
+    const reportDate = modal.querySelector('#report-date');
+    
+    if (data.squeeze_score) {
+        const score = data.squeeze_score;
+        squeezeScore.textContent = score.squeeze_score ? score.squeeze_score.toFixed(1) : 'N/A';
+        siScore.textContent = score.si_score ? score.si_score.toFixed(1) : 'N/A';
+        dtcScore.textContent = score.dtc_score ? score.dtc_score.toFixed(1) : 'N/A';
+        floatScore.textContent = score.float_score ? score.float_score.toFixed(1) : 'N/A';
+        momentumScore.textContent = score.momentum_score ? score.momentum_score.toFixed(1) : 'N/A';
+        dataQuality.textContent = score.data_quality ? score.data_quality.toUpperCase() : 'N/A';
+        
+        // Color code overall score
+        const overallScore = score.squeeze_score;
+        if (overallScore >= 70) {
+            squeezeScore.className = 'text-danger fw-bold';
+        } else if (overallScore >= 50) {
+            squeezeScore.className = 'text-warning fw-bold';
+        } else {
+            squeezeScore.className = 'text-success fw-bold';
+        }
+        
+        // Raw metrics
+        if (score.raw_metrics) {
+            const metrics = score.raw_metrics;
+            shortPercent.textContent = metrics.short_percent_of_float ? metrics.short_percent_of_float.toFixed(1) + '%' : 'N/A';
+            shortRatio.textContent = metrics.days_to_cover ? metrics.days_to_cover.toFixed(1) : 'N/A';
+            floatShares.textContent = metrics.float_shares ? (metrics.float_shares / 1000000).toFixed(1) + 'M' : 'N/A';
+            rsi.textContent = metrics.rsi ? metrics.rsi.toFixed(1) : 'N/A';
+            relativeVolume.textContent = metrics.relative_volume ? metrics.relative_volume.toFixed(2) + 'x' : 'N/A';
+            reportDate.textContent = metrics.report_date || 'N/A';
+        }
+    } else {
+        squeezeScore.textContent = 'N/A';
+        siScore.textContent = 'N/A';
+        dtcScore.textContent = 'N/A';
+        floatScore.textContent = 'N/A';
+        momentumScore.textContent = 'N/A';
+        dataQuality.textContent = 'N/A';
+        shortPercent.textContent = 'N/A';
+        shortRatio.textContent = 'N/A';
+        floatShares.textContent = 'N/A';
+        rsi.textContent = 'N/A';
+        relativeVolume.textContent = 'N/A';
+        reportDate.textContent = 'N/A';
+    }
+}
 </script>
+
+<!-- Short Squeeze Modal -->
+<div class="modal fade" id="shortSqueezeModal" tabindex="-1" aria-labelledby="shortSqueezeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="shortSqueezeModalLabel">Short Squeeze Analysis</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <!-- Overall Score -->
+                    <div class="col-12 mb-4">
+                        <div class="card text-center border-danger">
+                            <div class="card-body">
+                                <i class="fas fa-compress-arrows-alt fa-3x text-danger mb-2"></i>
+                                <h2 class="mb-0" id="squeeze-score">Loading...</h2>
+                                <small class="text-muted">Overall Squeeze Score</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <!-- Component Scores -->
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-danger">Component Scores</h6>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td>Short Interest % (40%)</td>
+                                    <td class="text-end fw-bold" id="si-score">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Days to Cover (30%)</td>
+                                    <td class="text-end fw-bold" id="dtc-score">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Float Size (15%)</td>
+                                    <td class="text-end fw-bold" id="float-score">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Momentum (15%)</td>
+                                    <td class="text-end fw-bold" id="momentum-score">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Data Quality</strong></td>
+                                    <td class="text-end fw-bold" id="data-quality">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Raw Metrics -->
+                    <div class="col-md-6 mb-3">
+                        <h6 class="text-danger">Raw Metrics</h6>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td>Short % of Float</td>
+                                    <td class="text-end" id="short-percent">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Days to Cover</td>
+                                    <td class="text-end" id="short-ratio">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Float Shares</td>
+                                    <td class="text-end" id="float-shares">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>RSI</td>
+                                    <td class="text-end" id="rsi">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td>Relative Volume</td>
+                                    <td class="text-end" id="relative-volume">Loading...</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Report Date</strong></td>
+                                    <td class="text-end" id="report-date">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning mt-3">
+                    <small><strong>Disclaimer:</strong> Short squeeze analysis is based on delayed data (typically 2-3 weeks). This is for informational purposes only and should not be considered financial advice.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('short_squeeze_analysis') }}" class="btn btn-danger">
+                    <i class="fas fa-list me-1"></i>View All Rankings
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

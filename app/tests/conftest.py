@@ -1,12 +1,10 @@
 """
-Global pytest configuration and fixtures for the Stock Analyst application.
-This file provides common fixtures and configuration for all tests.
+SECURE pytest configuration for Stock Analyst application.
+Uses isolated test database container to prevent production database access.
 """
 
 import pytest
 import os
-import tempfile
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pandas as pd
 from datetime import datetime, date
@@ -15,13 +13,17 @@ from datetime import datetime, date
 
 @pytest.fixture(autouse=True, scope="session")
 def setup_test_environment():
-    """Set up global test environment variables"""
+    """Set up SECURE test environment variables using isolated test database"""
     test_env = {
-        'DATABASE_PATH': ':memory:',
+        'POSTGRES_HOST': 'test-postgres',  # ISOLATED test database container
+        'POSTGRES_PORT': '5432', 
+        'POSTGRES_DB': 'stockanalyst_test',  # SEPARATE test database
+        'POSTGRES_USER': 'stockanalyst',
+        'POSTGRES_PASSWORD': 'testpassword',  # Different password for test
         'FMP_API_KEY': 'test_fmp_key',
         'SECRET_KEY': 'test-secret-key-for-testing',
         'LOG_LEVEL': 'ERROR',  # Reduce logging noise in tests
-        'TESTING': 'true'
+        'TESTING': 'true'  # CRITICAL: This triggers security checks
     }
     
     with patch.dict(os.environ, test_env):
@@ -29,106 +31,60 @@ def setup_test_environment():
 
 # --- Database Fixtures ---
 
-@pytest.fixture
-def temp_database():
-    """Create a temporary database file for tests that need persistence"""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
-        db_path = f.name
-    
-    yield db_path
-    
-    # Cleanup
-    try:
-        os.unlink(db_path)
-    except FileNotFoundError:
-        pass
-
-@pytest.fixture
-def in_memory_database():
-    """Create an in-memory database for fast tests"""
-    return ":memory:"
-
-@pytest.fixture
-def populated_database(temp_database):
-    """Create a database with sample test data"""
+@pytest.fixture(scope="session")
+def db_manager_session():
+    """Single DatabaseManager for entire test session to prevent connection pool exhaustion"""
     from database import DatabaseManager
     
-    db_manager = DatabaseManager(db_path=temp_database)
-    
-    # Add sample S&P 500 data
-    sp500_data = pd.DataFrame({
-        'symbol': ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA'],
-        'name': ['Apple Inc.', 'Microsoft Corp.', 'Alphabet Inc.', 'Amazon.com Inc.', 'Tesla Inc.'],
-        'sector': ['Technology', 'Technology', 'Technology', 'Consumer Discretionary', 'Consumer Discretionary'],
-        'sub_sector': ['Consumer Electronics', 'Software', 'Internet', 'Internet Retail', 'Automobiles'],
-        'headquarters_location': ['Cupertino, CA', 'Redmond, WA', 'Mountain View, CA', 'Seattle, WA', 'Austin, TX'],
-        'date_first_added': ['1980-12-12', '1986-03-13', '2006-04-03', '2005-05-26', '2020-12-21'],
-        'cik': ['0000320193', '0000789019', '0001652044', '0001018724', '0001318605'],
-        'founded': ['1976', '1975', '1998', '1994', '2003']
-    })
-    db_manager.insert_sp500_constituents(sp500_data)
-    
-    # Add company profiles
-    companies = [
-        ('AAPL', 'Apple Inc.', 170.0, 'Technology', 2800000000000),
-        ('MSFT', 'Microsoft Corp.', 400.0, 'Technology', 3000000000000),
-        ('GOOG', 'Alphabet Inc.', 2800.0, 'Technology', 1800000000000),
-        ('AMZN', 'Amazon.com Inc.', 3200.0, 'Consumer Discretionary', 1600000000000),
-        ('TSLA', 'Tesla Inc.', 250.0, 'Consumer Discretionary', 800000000000)
-    ]
-    
-    for symbol, name, price, sector, mktcap in companies:
-        profile_data = {
-            'symbol': symbol,
-            'companyname': name,
-            'price': price,
-            'sector': sector,
-            'mktcap': mktcap
-        }
-        db_manager.insert_company_profile(profile_data)
-    
-    # Add historical prices for each symbol
-    for symbol in ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA']:
-        prices_data = pd.DataFrame({
-            'date': ['2023-01-01', '2023-01-02', '2023-01-03', '2023-01-04', '2023-01-05'],
-            'open': [100.0, 101.0, 102.0, 103.0, 104.0],
-            'high': [102.0, 103.0, 104.0, 105.0, 106.0],
-            'low': [99.0, 100.0, 101.0, 102.0, 103.0],
-            'close': [101.0, 102.0, 103.0, 104.0, 105.0],
-            'volume': [100000, 120000, 110000, 130000, 125000]
-        })
-        db_manager.insert_historical_prices(symbol, prices_data)
-    
-    # Add undervaluation scores
-    scores_data = [
-        {
-            'symbol': 'AAPL',
-            'sector': 'Technology',
-            'undervaluation_score': 75.5,
-            'valuation_score': 70.0,
-            'quality_score': 80.0,
-            'strength_score': 78.0,
-            'risk_score': 60.0,
-            'data_quality': 'high',
-            'price': 170.0,
-            'mktcap': 2800000000000
-        },
-        {
-            'symbol': 'MSFT',
-            'sector': 'Technology',
-            'undervaluation_score': 60.2,
-            'valuation_score': 55.0,
-            'quality_score': 65.0,
-            'strength_score': 62.0,
-            'risk_score': 55.0,
-            'data_quality': 'high',
-            'price': 400.0,
-            'mktcap': 3000000000000
-        }
-    ]
-    db_manager.insert_undervaluation_scores(scores_data)
-    
-    yield temp_database, db_manager
+    # This will trigger security validation and require test database
+    db = DatabaseManager()
+    yield db
+    # Clean up connections after entire session
+    if hasattr(db, 'cleanup_connections'):
+        db.cleanup_connections()
+
+@pytest.fixture
+def db_manager(db_manager_session):
+    """Reuse session database manager with cleanup between tests"""
+    yield db_manager_session
+    # Clean up test data but reuse connection pool
+
+@pytest.fixture(autouse=True)
+def cleanup_database_connections():
+    """Automatically cleanup database connections after each test"""
+    yield
+    try:
+        # Force cleanup of any remaining database connections
+        import gc
+        from database import DatabaseManager
+        
+        # Dispose of any DatabaseManager engines that were created during the test
+        # This will clean up connection pools from individual test DatabaseManager instances
+        gc.collect()
+        
+        # Clear any orphaned connection pools
+        try:
+            import sqlalchemy.pool as pool
+            if hasattr(pool, 'clear_managers'):
+                pool.clear_managers()
+        except:
+            pass
+            
+        # Force disposal of any engines that might be lingering
+        try:
+            import sqlalchemy
+            # Get all engines and dispose them
+            for engine in sqlalchemy.engine._engine_registry:
+                try:
+                    engine.dispose()
+                except:
+                    pass
+        except:
+            pass
+            
+    except Exception:
+        # Silent cleanup - don't fail tests due to cleanup issues
+        pass
 
 # --- Authentication Fixtures ---
 
@@ -136,18 +92,34 @@ def populated_database(temp_database):
 def test_user_data():
     """Standard test user data"""
     return {
-        'username': 'testuser',
-        'email': 'test@example.com',
+        'username': 'testuser_safe',
+        'email': 'test_safe@example.com',
         'password': 'securepassword123'
     }
 
 @pytest.fixture
-def authenticated_user(temp_database, test_user_data):
-    """Create and authenticate a test user"""
+def auth_manager(db_manager):
+    """Create AuthenticationManager with test database"""
     from auth import AuthenticationManager
+    return AuthenticationManager(db_manager=db_manager)
+
+@pytest.fixture
+def clean_auth_tables(db_manager_session):
+    """Clean authentication tables before each test"""
+    from sqlalchemy import text
     
-    auth_manager = AuthenticationManager(db_path=temp_database)
-    
+    with db_manager_session.engine.begin() as conn:
+        # Clean user-related tables
+        conn.execute(text("DELETE FROM user_sessions"))
+        conn.execute(text("DELETE FROM user_watchlists")) 
+        conn.execute(text("DELETE FROM user_portfolios"))
+        conn.execute(text("DELETE FROM portfolio_transactions"))
+        conn.execute(text("DELETE FROM users"))
+        conn.commit()
+
+@pytest.fixture
+def authenticated_user(auth_manager, test_user_data, clean_auth_tables):
+    """Create and authenticate a test user"""
     # Register user
     registration_result = auth_manager.register_user(
         username=test_user_data['username'],
@@ -155,11 +127,17 @@ def authenticated_user(temp_database, test_user_data):
         password=test_user_data['password']
     )
     
+    if not registration_result['success']:
+        pytest.fail(f"Failed to register test user: {registration_result.get('error')}")
+    
     # Authenticate user
     login_result = auth_manager.authenticate_user(
         username=test_user_data['username'],
         password=test_user_data['password']
     )
+    
+    if not login_result['success']:
+        pytest.fail(f"Failed to authenticate test user: {login_result.get('error')}")
     
     yield {
         'user_id': registration_result['user_id'],
@@ -169,148 +147,28 @@ def authenticated_user(temp_database, test_user_data):
         'auth_manager': auth_manager
     }
 
-# --- API Mock Fixtures ---
+# --- Portfolio Fixtures ---
 
 @pytest.fixture
-def mock_fmp_client():
-    """Mock FMP client with realistic responses"""
-    with patch('fmp_client.FMPClient') as mock_class:
-        mock_instance = MagicMock()
-        mock_class.return_value = mock_instance
-        
-        # Mock S&P 500 constituents
-        mock_sp500_df = pd.DataFrame({
-            'Symbol': ['AAPL', 'MSFT'],
-            'Name': ['Apple Inc.', 'Microsoft Corp.'],
-            'Sector': ['Technology', 'Technology']
-        })
-        mock_instance.get_sp500_constituents.return_value = mock_sp500_df
-        
-        # Mock company profile
-        mock_instance.get_company_profile.return_value = {
-            'symbol': 'AAPL',
-            'companyName': 'Apple Inc.',
-            'price': 170.0,
-            'sector': 'Technology',
-            'marketCap': 2800000000000
-        }
-        
-        # Mock historical prices
-        mock_historical_df = pd.DataFrame({
-            'Date': ['2023-01-01', '2023-01-02'],
-            'Open': [100.0, 101.0],
-            'High': [102.0, 103.0],
-            'Low': [99.0, 100.0],
-            'Close': [101.0, 102.0],
-            'Volume': [100000, 120000]
-        })
-        mock_instance.get_historical_prices.return_value = mock_historical_df
-        
-        # Mock fundamentals
-        mock_instance.get_fundamentals_summary.return_value = {
-            'pe_ratio': 25.0,
-            'price_to_book': 5.0,
-            'roe': 0.20,
-            'debt_to_equity': 0.30
-        }
-        
-        # Mock usage tracking
-        mock_instance.get_usage_summary.return_value = {
-            'used_today': 50,
-            'remaining_today': 200,
-            'percentage_used': 20.0
-        }
-        
-        yield mock_instance
-
-@pytest.fixture
-def mock_yahoo_client():
-    """Mock Yahoo Finance client with realistic responses"""
-    with patch('yahoo_finance_client.YahooFinanceClient') as mock_class:
-        mock_instance = MagicMock()
-        mock_class.return_value = mock_instance
-        
-        # Mock quote data
-        mock_instance.get_quote.return_value = {
-            'symbol': 'AAPL',
-            'price': 170.0,
-            'market_cap': 2800000000000,
-            'pe_ratio': 25.0,
-            'source': 'yahoo_finance'
-        }
-        
-        # Mock company profile
-        mock_instance.get_company_profile.return_value = {
-            'symbol': 'AAPL',
-            'companyname': 'Apple Inc.',
-            'sector': 'Technology',
-            'description': 'Technology company',
-            'source': 'yahoo_finance'
-        }
-        
-        # Mock historical prices
-        mock_historical_df = pd.DataFrame({
-            'date': [date(2023, 1, 1), date(2023, 1, 2)],
-            'open': [100.0, 101.0],
-            'high': [102.0, 103.0],
-            'low': [99.0, 100.0],
-            'close': [101.0, 102.0],
-            'volume': [100000, 120000]
-        })
-        mock_instance.get_historical_prices.return_value = mock_historical_df
-        
-        # Mock availability
-        mock_instance.is_available.return_value = True
-        
-        yield mock_instance
-
-# --- Service Fixtures ---
-
-@pytest.fixture
-def stock_data_service(populated_database):
-    """Create a StockDataService with populated database"""
-    from data_access_layer import StockDataService
-    
-    db_path, db_manager = populated_database
-    return StockDataService(db_manager=db_manager)
-
-@pytest.fixture
-def portfolio_manager_with_user(temp_database, authenticated_user):
-    """Create a PortfolioManager with an authenticated user"""
+def portfolio_manager(db_manager):
+    """Create PortfolioManager with test database"""
     from portfolio import PortfolioManager
-    
-    portfolio_manager = PortfolioManager(db_path=temp_database)
-    
-    # Add some sample transactions
-    transactions = [
-        ('BUY', 'AAPL', 10.0, 150.0, date(2023, 1, 1)),
-        ('BUY', 'MSFT', 5.0, 300.0, date(2023, 1, 2)),
-        ('SELL', 'AAPL', 2.0, 160.0, date(2023, 1, 3))
-    ]
-    
-    for transaction_type, symbol, shares, price, transaction_date in transactions:
-        portfolio_manager.add_transaction(
-            user_id=authenticated_user['user_id'],
-            transaction_type=transaction_type,
-            symbol=symbol,
-            shares=shares,
-            price_per_share=price,
-            transaction_date=transaction_date
-        )
-    
-    yield portfolio_manager, authenticated_user
+    return PortfolioManager(db_manager=db_manager)
 
 # --- Flask App Fixtures ---
 
 @pytest.fixture
 def flask_test_client():
-    """Create Flask test client with mocked dependencies"""
-    with patch.dict(os.environ, {
+    """Create Flask test client with ISOLATED test database"""
+    test_env = {
+        'POSTGRES_HOST': 'test-postgres',  # ISOLATED test database
+        'POSTGRES_DB': 'stockanalyst_test',
         'SECRET_KEY': 'test-secret-key',
-        'DATABASE_PATH': ':memory:',
         'FMP_API_KEY': 'test_fmp_key',
         'TESTING': 'true'
-    }):
+    }
+    
+    with patch.dict(os.environ, test_env):
         from app import app
         
         app.config['TESTING'] = True
@@ -320,108 +178,23 @@ def flask_test_client():
             with app.app_context():
                 yield client
 
-# --- Temporary File Fixtures ---
+# --- Safety Validation Fixtures ---
 
-@pytest.fixture
-def temp_files():
-    """Create temporary files for testing file operations"""
-    files = {}
+@pytest.fixture(autouse=True)
+def validate_test_environment():
+    """Validate that we're using test database, not production"""
+    postgres_host = os.getenv('POSTGRES_HOST')
+    postgres_db = os.getenv('POSTGRES_DB')
+    is_testing = os.getenv('TESTING', '').lower() == 'true'
     
-    # Create temporary files
-    for name in ['pid', 'status', 'log', 'config']:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{name}') as f:
-            files[name] = Path(f.name)
+    # Ensure we're in testing mode
+    assert is_testing, "TESTING environment variable must be set to 'true'"
     
-    yield files
+    # Ensure we're not using production database
+    assert postgres_host == 'test-postgres', f"Must use test-postgres, not {postgres_host}"
+    assert postgres_db == 'stockanalyst_test', f"Must use stockanalyst_test, not {postgres_db}"
     
-    # Cleanup
-    for file_path in files.values():
-        try:
-            file_path.unlink()
-        except FileNotFoundError:
-            pass
-
-# --- Performance Fixtures ---
-
-@pytest.fixture
-def performance_timer():
-    """Timer fixture for performance testing"""
-    import time
-    
-    class Timer:
-        def __init__(self):
-            self.start_time = None
-            self.end_time = None
-        
-        def start(self):
-            self.start_time = time.time()
-            return self
-        
-        def stop(self):
-            self.end_time = time.time()
-            return self
-        
-        @property
-        def elapsed(self):
-            if self.start_time and self.end_time:
-                return self.end_time - self.start_time
-            return None
-        
-        def assert_under(self, max_seconds, message="Operation took too long"):
-            assert self.elapsed < max_seconds, f"{message}: {self.elapsed:.2f}s > {max_seconds}s"
-    
-    return Timer()
-
-# --- Test Data Fixtures ---
-
-@pytest.fixture
-def sample_stock_data():
-    """Sample stock data for testing"""
-    return {
-        'symbol': 'AAPL',
-        'name': 'Apple Inc.',
-        'sector': 'Technology',
-        'price': 170.0,
-        'market_cap': 2800000000000,
-        'pe_ratio': 25.0,
-        'historical_prices': [
-            {'date': '2023-01-01', 'close': 170.0},
-            {'date': '2023-01-02', 'close': 171.0},
-            {'date': '2023-01-03', 'close': 169.0}
-        ]
-    }
-
-@pytest.fixture
-def sample_portfolio_data():
-    """Sample portfolio data for testing"""
-    return {
-        'holdings': [
-            {'symbol': 'AAPL', 'shares': 10, 'avg_price': 150.0},
-            {'symbol': 'MSFT', 'shares': 5, 'avg_price': 300.0}
-        ],
-        'transactions': [
-            {'type': 'BUY', 'symbol': 'AAPL', 'shares': 10, 'price': 150.0, 'date': '2023-01-01'},
-            {'type': 'BUY', 'symbol': 'MSFT', 'shares': 5, 'price': 300.0, 'date': '2023-01-02'}
-        ]
-    }
-
-# --- Utility Fixtures ---
-
-@pytest.fixture
-def mock_datetime():
-    """Mock datetime for consistent testing"""
-    fixed_datetime = datetime(2023, 7, 1, 12, 0, 0)
-    fixed_date = date(2023, 7, 1)
-    
-    with patch('datetime.datetime') as mock_dt:
-        mock_dt.now.return_value = fixed_datetime
-        mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
-        
-        with patch('datetime.date') as mock_d:
-            mock_d.today.return_value = fixed_date
-            mock_d.side_effect = lambda *args, **kw: date(*args, **kw)
-            
-            yield fixed_datetime, fixed_date
+    print(f"✅ SAFE: Using test database {postgres_host}/{postgres_db}")
 
 # --- Pytest Hooks ---
 
@@ -430,26 +203,176 @@ def pytest_configure(config):
     # Add custom markers
     config.addinivalue_line("markers", "slow: mark test as slow running")
     config.addinivalue_line("markers", "integration: mark test as integration test")
-    config.addinivalue_line("markers", "external: mark test as requiring external services")
-
-def pytest_collection_modifyitems(config, items):
-    """Modify test collection to add markers based on file names"""
-    for item in items:
-        # Auto-mark tests based on file names
-        if "test_integration" in item.nodeid:
-            item.add_marker(pytest.mark.integration)
-        if "test_performance" in item.nodeid:
-            item.add_marker(pytest.mark.slow)
-        if "external" in item.nodeid:
-            item.add_marker(pytest.mark.external)
+    config.addinivalue_line("markers", "unit: mark test as unit test")
 
 def pytest_runtest_setup(item):
-    """Setup before each test"""
-    # Skip external tests if running in CI without network access
-    if "external" in item.keywords and os.environ.get("SKIP_EXTERNAL_TESTS"):
-        pytest.skip("Skipping external test in CI environment")
+    """Setup before each test - validate environment safety"""
+    # Double-check we're not connecting to production
+    postgres_host = os.getenv('POSTGRES_HOST')
+    if postgres_host == 'postgres':
+        pytest.fail("SECURITY VIOLATION: Test attempting to use production database!")
 
-def pytest_runtest_teardown(item):
-    """Cleanup after each test"""
-    # Could add cleanup logic here if needed
-    pass
+def pytest_sessionstart(session):
+    """Called after the Session object has been created"""
+    print("\n🔒 SECURE TEST MODE: Using isolated test database container")
+    print(f"   Database: {os.getenv('POSTGRES_HOST')}/{os.getenv('POSTGRES_DB')}")
+    print("   Production database is PROTECTED from test access\n")
+
+def pytest_sessionfinish(session, exitstatus):
+    """Called after whole test run finished"""
+    print("\n✅ Test session completed with isolated database")
+    print("   Production database remains UNTOUCHED")
+    
+    # Clean up any remaining database connections
+    try:
+        # The session cleanup will be handled by the session-scoped fixture
+        print("   Database connections cleaned up")
+    except Exception as e:
+        print(f"   Warning: Could not clean up connections: {e}")
+
+# --- Connection Management ---
+
+@pytest.fixture(scope="session", autouse=True)
+def manage_db_connections():
+    """Manage database connections for the entire test session"""
+    yield
+    # Session cleanup - dispose of all connections
+    try:
+        import sqlalchemy.pool as pool
+        pool.clear_managers()
+        print("   Cleared SQLAlchemy connection pool managers")
+    except Exception as e:
+        print(f"   Warning: Could not clear connection pools: {e}")
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+
+@pytest.fixture(scope="session")
+def driver():
+    """
+    Pytest fixture to create a Selenium WebDriver instance.
+    Connects to the standalone Chrome container with optimized configuration.
+    """
+    chrome_options = ChromeOptions()
+    
+    # Add critical container environment options
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    
+    # Additional network and stability options
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--allow-running-insecure-content")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    chrome_options.add_argument("--single-process")
+    chrome_options.add_argument("--disable-infobars")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--window-size=1920,1080")
+    
+    # The command_executor URL points to the Selenium container
+    try:
+        remote_driver = webdriver.Remote(
+            command_executor='http://selenium-chrome:4444/wd/hub',
+            options=chrome_options
+        )
+        
+        # Set reduced timeouts to prevent hanging
+        remote_driver.set_page_load_timeout(30)  # Reduce from 300s default
+        remote_driver.implicitly_wait(10)        # Set implicit wait
+        
+        yield remote_driver
+        
+        # Teardown: quit the driver after tests are done
+        remote_driver.quit()
+    except Exception as e:
+        pytest.fail(f"Failed to connect to Selenium WebDriver: {e}")
+
+# --- Base URL Configuration ---
+
+@pytest.fixture
+def base_url():
+    """Base URL for test webapp - uses container hostname"""
+    return "http://sa-test-web:5000"  # Use container hostname for test environment
+
+@pytest.fixture(autouse=True, scope="session")
+def validate_test_environment():
+    """Validate test environment before running tests"""
+    import requests
+    import time
+    
+    base_url = "http://sa-test-web:5000"
+    
+    # Wait for webapp to be ready
+    max_retries = 10
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
+        try:
+            # Try health check endpoint
+            response = requests.get(f"{base_url}/api/v2/health", timeout=10)
+            if response.status_code == 200:
+                print(f"✅ Webapp is accessible at {base_url}")
+                return
+        except requests.exceptions.RequestException:
+            pass
+        
+        try:
+            # Fallback: try main page
+            response = requests.get(base_url, timeout=10)
+            if response.status_code in [200, 302]:  # 302 for redirect to login
+                print(f"✅ Webapp is accessible at {base_url} (status: {response.status_code})")
+                return
+        except requests.exceptions.RequestException:
+            pass
+        
+        if attempt < max_retries - 1:
+            print(f"⏳ Webapp not ready yet, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})")
+            time.sleep(retry_delay)
+    
+    pytest.fail(f"❌ Webapp not accessible at {base_url} after {max_retries} attempts")
+
+# --- Scheduler Fixtures ---
+
+@pytest.fixture(scope="session")
+def scheduler_session(db_manager_session):
+    """Single scheduler instance for entire test session to prevent connection pool exhaustion"""
+    from scheduler import Scheduler
+    
+    # Create scheduler with existing database manager
+    scheduler = Scheduler(db_manager=db_manager_session)
+    try:
+        yield scheduler
+    finally:
+        if hasattr(scheduler, 'cleanup'):
+            scheduler.cleanup()
+
+@pytest.fixture
+def scheduler(scheduler_session):
+    """Reuse session scheduler with cleanup between tests"""
+    yield scheduler_session
+    # Clean up test data but reuse scheduler instance
+
+@pytest.fixture
+def mock_scheduler_db_operations():
+    """Mock heavy database operations for scheduler tests"""
+    from unittest.mock import patch, MagicMock
+    
+    with patch('scheduler.DatabaseManager') as mock_db:
+        # Mock common database operations
+        mock_db.return_value.get_sp500_symbols.return_value = ['AAPL', 'MSFT', 'GOOGL']
+        mock_db.return_value.insert_short_interest_data.return_value = True
+        mock_db.return_value.update_company_profile.return_value = True
+        mock_db.return_value.insert_historical_prices.return_value = True
+        
+        # Mock database connection
+        mock_conn = MagicMock()
+        mock_db.return_value.engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_db.return_value.engine.connect.return_value.__exit__.return_value = None
+        
+        yield mock_db

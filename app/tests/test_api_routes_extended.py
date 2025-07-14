@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 # Set environment variables before importing
 os.environ.update({
     'SECRET_KEY': 'test-secret-key',
-    'DATABASE_PATH': ':memory:',
+    
     'FMP_API_KEY': 'test_fmp_key'
 })
 

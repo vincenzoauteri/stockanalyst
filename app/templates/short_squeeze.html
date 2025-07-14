@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}Short Squeeze Analysis - Stock Analyst{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="display-5 mb-0">
+            <i class="fas fa-compress-arrows-alt text-danger me-2"></i>
+            Short Squeeze Analysis
+        </h1>
+        <p class="lead text-muted">Identify stocks with high short squeeze potential based on quantitative analysis</p>
+    </div>
+</div>
+
+<!-- Summary Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center border-primary">
+            <div class="card-body">
+                <i class="fas fa-chart-line fa-2x text-primary mb-2"></i>
+                <h4 class="text-primary mb-0">{{ stats.total_scores or 0 }}</h4>
+                <small class="text-muted">Total Scored</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
+                <h4 class="text-danger mb-0">{{ stats.high_risk_count or 0 }}</h4>
+                <small class="text-muted">High Risk (≥70)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <i class="fas fa-chart-bar fa-2x text-warning mb-2"></i>
+                <h4 class="text-warning mb-0">{{ "%.1f"|format(stats.avg_squeeze_score or 0) }}</h4>
+                <small class="text-muted">Avg Score</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <i class="fas fa-percentage fa-2x text-info mb-2"></i>
+                <h4 class="text-info mb-0">{{ "%.1f"|format(stats.max_short_percent or 0) }}%</h4>
+                <small class="text-muted">Max Short Interest</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-filter me-2"></i>Filters
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <label for="limit" class="form-label">Results Limit</label>
+                <select class="form-select" name="limit" id="limit">
+                    <option value="25" {% if filters.limit == 25 %}selected{% endif %}>25</option>
+                    <option value="50" {% if filters.limit == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if filters.limit == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if filters.limit == 200 %}selected{% endif %}>200</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="order_by" class="form-label">Sort By</label>
+                <select class="form-select" name="order_by" id="order_by">
+                    <option value="squeeze_score" {% if filters.order_by == 'squeeze_score' %}selected{% endif %}>Overall Score</option>
+                    <option value="si_score" {% if filters.order_by == 'si_score' %}selected{% endif %}>Short Interest %</option>
+                    <option value="dtc_score" {% if filters.order_by == 'dtc_score' %}selected{% endif %}>Days to Cover</option>
+                    <option value="float_score" {% if filters.order_by == 'float_score' %}selected{% endif %}>Float Size</option>
+                    <option value="momentum_score" {% if filters.order_by == 'momentum_score' %}selected{% endif %}>Momentum</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="min_score" class="form-label">Min Score</label>
+                <input type="number" class="form-control" name="min_score" id="min_score" 
+                       min="0" max="100" step="0.1" placeholder="0.0" 
+                       value="{{ filters.min_score or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="min_data_quality" class="form-label">Min Data Quality</label>
+                <select class="form-select" name="min_data_quality" id="min_data_quality">
+                    <option value="">All</option>
+                    <option value="low" {% if filters.min_data_quality == 'low' %}selected{% endif %}>Low+</option>
+                    <option value="medium" {% if filters.min_data_quality == 'medium' %}selected{% endif %}>Medium+</option>
+                    <option value="high" {% if filters.min_data_quality == 'high' %}selected{% endif %}>High</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-search me-1"></i>Apply Filters
+                </button>
+                <a href="{{ url_for('short_squeeze_analysis') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-undo me-1"></i>Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-list me-2"></i>Short Squeeze Rankings
+        </h5>
+        <span class="badge bg-primary">{{ rankings|length }} Results</span>
+    </div>
+    <div class="card-body p-0">
+        {% if rankings %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">#</th>
+                        <th scope="col">Symbol</th>
+                        <th scope="col">Company</th>
+                        <th scope="col">Price</th>
+                        <th scope="col">Squeeze Score</th>
+                        <th scope="col">Short Interest %</th>
+                        <th scope="col">Days to Cover</th>
+                        <th scope="col">Float Size</th>
+                        <th scope="col">Momentum</th>
+                        <th scope="col">Data Quality</th>
+                        <th scope="col">Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rank in rankings %}
+                    <tr>
+                        <td class="fw-bold">{{ loop.index }}</td>
+                        <td>
+                            <a href="{{ url_for('stock_detail', symbol=rank.symbol) }}" 
+                               class="text-decoration-none fw-bold">
+                                {{ rank.symbol }}
+                            </a>
+                        </td>
+                        <td>
+                            <div>
+                                <span class="fw-medium">{{ rank.company_name or 'N/A' }}</span>
+                                {% if rank.sector %}
+                                <br><small class="text-muted">{{ rank.sector }}</small>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if rank.price %}
+                            ${{ "%.2f"|format(rank.price) }}
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rank.squeeze_score %}
+                            <div class="d-flex align-items-center">
+                                <span class="fw-bold 
+                                    {% if rank.squeeze_score >= 70 %}text-danger
+                                    {% elif rank.squeeze_score >= 50 %}text-warning
+                                    {% else %}text-success{% endif %}">
+                                    {{ "%.1f"|format(rank.squeeze_score) }}
+                                </span>
+                                <div class="progress ms-2" style="width: 60px; height: 8px;">
+                                    <div class="progress-bar 
+                                        {% if rank.squeeze_score >= 70 %}bg-danger
+                                        {% elif rank.squeeze_score >= 50 %}bg-warning
+                                        {% else %}bg-success{% endif %}" 
+                                         style="width: {{ rank.squeeze_score }}%"></div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rank.short_percent_of_float %}
+                            <span class="{% if rank.short_percent_of_float >= 20 %}text-danger fw-bold{% elif rank.short_percent_of_float >= 10 %}text-warning{% endif %}">
+                                {{ "%.1f"|format(rank.short_percent_of_float) }}%
+                            </span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rank.short_ratio %}
+                            <span class="{% if rank.short_ratio >= 5 %}text-danger fw-bold{% elif rank.short_ratio >= 3 %}text-warning{% endif %}">
+                                {{ "%.1f"|format(rank.short_ratio) }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rank.float_shares %}
+                            {% set float_millions = rank.float_shares / 1000000 %}
+                            <span class="{% if float_millions <= 50 %}text-danger fw-bold{% elif float_millions <= 100 %}text-warning{% endif %}">
+                                {{ "%.1fM"|format(float_millions) }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rank.momentum_score %}
+                            <span class="fw-bold 
+                                {% if rank.momentum_score >= 70 %}text-danger
+                                {% elif rank.momentum_score >= 50 %}text-warning
+                                {% else %}text-muted{% endif %}">
+                                {{ "%.1f"|format(rank.momentum_score) }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge 
+                                {% if rank.data_quality == 'high' %}bg-success
+                                {% elif rank.data_quality == 'medium' %}bg-warning
+                                {% elif rank.data_quality == 'low' %}bg-secondary
+                                {% else %}bg-light text-dark{% endif %}">
+                                {{ rank.data_quality.title() if rank.data_quality else 'Unknown' }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if rank.calculated_at %}
+                            <small class="text-muted">
+                                {{ rank.calculated_at[:10] }}
+                            </small>
+                            {% else %}
+                            <small class="text-muted">N/A</small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-search fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No Results Found</h5>
+            <p class="text-muted">Try adjusting your filters to see more results.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Info Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Understanding Short Squeeze Analysis
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-info">Score Components:</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Short Interest % (40%):</strong> Percentage of float shares sold short</li>
+                            <li><strong>Days to Cover (30%):</strong> Time needed to cover all short positions</li>
+                            <li><strong>Float Size (15%):</strong> Number of tradeable shares (smaller = higher risk)</li>
+                            <li><strong>Momentum (15%):</strong> Technical indicators (RSI + Relative Volume)</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-info">Risk Levels:</h6>
+                        <ul class="list-unstyled">
+                            <li><span class="badge bg-danger me-2">≥70</span> High squeeze potential</li>
+                            <li><span class="badge bg-warning me-2">50-69</span> Moderate squeeze potential</li>
+                            <li><span class="badge bg-success me-2">&lt;50</span> Low squeeze potential</li>
+                        </ul>
+                        <div class="alert alert-warning mt-3" role="alert">
+                            <small><strong>Disclaimer:</strong> This analysis is for informational purposes only. Short squeeze data is typically delayed 2-3 weeks. Always conduct your own research before making investment decisions.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-submit form when filters change (optional)
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    const selects = form.querySelectorAll('select');
+    
+    selects.forEach(select => {
+        select.addEventListener('change', function() {
+            // Optional: uncomment to auto-submit on filter change
+            // form.submit();
+        });
+    });
+});
+</script>
+
+{% endblock %}

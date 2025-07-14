@@ -504,8 +504,9 @@ class StockDataService:
                     LEFT JOIN company_profiles p ON s.symbol = p.symbol
                     LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
                     WHERE 
-                        UPPER(s.symbol) LIKE UPPER(:query) OR 
-                        UPPER(s.name) LIKE UPPER(:search_pattern)
+                        UPPER(s.symbol) LIKE UPPER(:search_pattern) OR 
+                        UPPER(s.name) LIKE UPPER(:search_pattern) OR
+                        UPPER(s.sector) LIKE UPPER(:search_pattern)
                     ORDER BY 
                         CASE WHEN UPPER(s.symbol) = UPPER(:query) THEN 1 ELSE 2 END,
                         u.undervaluation_score DESC NULLS LAST
@@ -1259,3 +1260,309 @@ class StockDataService:
         except Exception as e:
             logger.error(f"Error calculating beta for {symbol}: {e}")
             return None
+    
+    # Short Squeeze Data Access Methods
+    
+    def get_short_interest_data(self, symbol: str) -> Optional[Dict]:
+        """
+        Get the latest short interest data for a symbol
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            Dictionary with short interest data or None if not found
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                query = text("""
+                    SELECT symbol, report_date, short_interest, float_shares, 
+                           short_ratio, short_percent_of_float, average_daily_volume,
+                           created_at, updated_at
+                    FROM short_interest_data 
+                    WHERE symbol = :symbol 
+                    ORDER BY report_date DESC 
+                    LIMIT 1
+                """)
+                result = conn.execute(query, {"symbol": symbol})
+                data = result.fetchone()
+                
+                if not data:
+                    return None
+                
+                # Convert to dict and format dates
+                short_data = dict(data._mapping)
+                for key, value in short_data.items():
+                    if hasattr(value, 'isoformat'):
+                        short_data[key] = value.isoformat()
+                
+                return short_data
+                
+        except Exception as e:
+            logger.error(f"Error getting short interest data for {symbol}: {e}")
+            return None
+    
+    def get_short_squeeze_score(self, symbol: str) -> Optional[Dict]:
+        """
+        Get the latest short squeeze score for a symbol
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            Dictionary with squeeze score data or None if not found
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                query = text("""
+                    SELECT symbol, squeeze_score, si_score, dtc_score, float_score,
+                           momentum_score, data_quality, raw_metrics,
+                           calculated_at, created_at, updated_at
+                    FROM short_squeeze_scores 
+                    WHERE symbol = :symbol 
+                    ORDER BY calculated_at DESC 
+                    LIMIT 1
+                """)
+                result = conn.execute(query, {"symbol": symbol})
+                data = result.fetchone()
+                
+                if not data:
+                    return None
+                
+                # Convert to dict and format dates
+                squeeze_data = dict(data._mapping)
+                for key, value in squeeze_data.items():
+                    if hasattr(value, 'isoformat'):
+                        squeeze_data[key] = value.isoformat()
+                
+                return squeeze_data
+                
+        except Exception as e:
+            logger.error(f"Error getting short squeeze score for {symbol}: {e}")
+            return None
+    
+    def get_short_squeeze_rankings(self, 
+                                   limit: int = 50,
+                                   order_by: str = 'squeeze_score',
+                                   min_score: Optional[float] = None,
+                                   min_data_quality: Optional[str] = None) -> List[Dict]:
+        """
+        Get top short squeeze candidates ranked by various metrics
+        
+        Args:
+            limit: Maximum number of results to return
+            order_by: Field to order by (squeeze_score, si_score, dtc_score, float_score, momentum_score)
+            min_score: Minimum squeeze score filter
+            min_data_quality: Minimum data quality filter (high, medium, low)
+            
+        Returns:
+            List of dictionaries containing ranked squeeze candidates
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                # Build dynamic WHERE clause
+                where_conditions = []
+                params = {"limit": limit}
+                
+                if min_score is not None:
+                    where_conditions.append("ss.squeeze_score >= :min_score")
+                    params['min_score'] = min_score
+                
+                if min_data_quality:
+                    quality_order = {'high': 3, 'medium': 2, 'low': 1}
+                    if min_data_quality in quality_order:
+                        where_conditions.append("""
+                            CASE 
+                                WHEN ss.data_quality = 'high' THEN 3
+                                WHEN ss.data_quality = 'medium' THEN 2
+                                WHEN ss.data_quality = 'low' THEN 1
+                                ELSE 0
+                            END >= :min_quality_level
+                        """)
+                        params['min_quality_level'] = quality_order[min_data_quality]
+                
+                where_clause = ""
+                if where_conditions:
+                    where_clause = "WHERE " + " AND ".join(where_conditions)
+                
+                # Validate order_by column
+                valid_columns = ['squeeze_score', 'si_score', 'dtc_score', 'float_score', 'momentum_score']
+                if order_by not in valid_columns:
+                    order_by = 'squeeze_score'
+                
+                query = text(f"""
+                    SELECT 
+                        ss.symbol,
+                        sp.name as company_name,
+                        sp.sector,
+                        cp.price,
+                        cp.mktcap as market_cap,
+                        ss.squeeze_score,
+                        ss.si_score,
+                        ss.dtc_score,
+                        ss.float_score,
+                        ss.momentum_score,
+                        ss.data_quality,
+                        ss.calculated_at,
+                        si.short_percent_of_float,
+                        si.short_ratio,
+                        si.float_shares,
+                        si.report_date
+                    FROM short_squeeze_scores ss
+                    LEFT JOIN sp500_constituents sp ON ss.symbol = sp.symbol
+                    LEFT JOIN company_profiles cp ON ss.symbol = cp.symbol
+                    LEFT JOIN short_interest_data si ON ss.symbol = si.symbol
+                    {where_clause}
+                    ORDER BY ss.{order_by} DESC NULLS LAST
+                    LIMIT :limit
+                """)
+                
+                result = conn.execute(query, params)
+                rankings = result.fetchall()
+                
+                # Convert to list of dictionaries
+                results = []
+                for rank in rankings:
+                    rank_data = dict(rank._mapping)
+                    # Format dates
+                    for key, value in rank_data.items():
+                        if hasattr(value, 'isoformat'):
+                            rank_data[key] = value.isoformat()
+                    results.append(rank_data)
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"Error getting short squeeze rankings: {e}")
+            return []
+    
+    def get_all_short_interest_data(self, limit: int = 100) -> List[Dict]:
+        """
+        Get recent short interest data across all symbols
+        
+        Args:
+            limit: Maximum number of records to return
+            
+        Returns:
+            List of dictionaries containing short interest data
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                query = text("""
+                    SELECT 
+                        si.symbol,
+                        sp.name as company_name,
+                        si.report_date,
+                        si.short_interest,
+                        si.float_shares,
+                        si.short_ratio,
+                        si.short_percent_of_float,
+                        si.average_daily_volume,
+                        si.created_at
+                    FROM short_interest_data si
+                    LEFT JOIN sp500_constituents sp ON si.symbol = sp.symbol
+                    ORDER BY si.report_date DESC, si.short_percent_of_float DESC NULLS LAST
+                    LIMIT :limit
+                """)
+                result = conn.execute(query, {"limit": limit})
+                data = result.fetchall()
+                
+                # Convert to list of dictionaries
+                results = []
+                for row in data:
+                    row_data = dict(row._mapping)
+                    # Format dates
+                    for key, value in row_data.items():
+                        if hasattr(value, 'isoformat'):
+                            row_data[key] = value.isoformat()
+                    results.append(row_data)
+                
+                return results
+                
+        except Exception as e:
+            logger.error(f"Error getting all short interest data: {e}")
+            return []
+    
+    def get_short_squeeze_summary_stats(self) -> Dict:
+        """
+        Get summary statistics for short squeeze data
+        
+        Returns:
+            Dictionary containing summary statistics
+        """
+        try:
+            with self.db_manager.engine.connect() as conn:
+                query = text("""
+                    SELECT 
+                        COUNT(ss.symbol) as total_scores,
+                        COUNT(CASE WHEN ss.data_quality = 'high' THEN 1 END) as high_quality_scores,
+                        COUNT(CASE WHEN ss.data_quality = 'medium' THEN 1 END) as medium_quality_scores,
+                        COUNT(CASE WHEN ss.data_quality = 'low' THEN 1 END) as low_quality_scores,
+                        AVG(ss.squeeze_score) as avg_squeeze_score,
+                        MAX(ss.squeeze_score) as max_squeeze_score,
+                        COUNT(CASE WHEN ss.squeeze_score >= 70 THEN 1 END) as high_risk_count,
+                        COUNT(CASE WHEN ss.squeeze_score >= 50 AND ss.squeeze_score < 70 THEN 1 END) as medium_risk_count,
+                        COUNT(CASE WHEN ss.squeeze_score < 50 THEN 1 END) as low_risk_count,
+                        COUNT(si.symbol) as total_short_interest_records,
+                        AVG(si.short_percent_of_float) as avg_short_percent,
+                        MAX(si.short_percent_of_float) as max_short_percent
+                    FROM short_squeeze_scores ss
+                    FULL OUTER JOIN short_interest_data si ON ss.symbol = si.symbol
+                """)
+                result = conn.execute(query)
+                stats = result.fetchone()
+                
+                if not stats:
+                    return {}
+                
+                return {
+                    'total_scores': stats.total_scores or 0,
+                    'high_quality_scores': stats.high_quality_scores or 0,
+                    'medium_quality_scores': stats.medium_quality_scores or 0,
+                    'low_quality_scores': stats.low_quality_scores or 0,
+                    'avg_squeeze_score': round(stats.avg_squeeze_score, 2) if stats.avg_squeeze_score else 0,
+                    'max_squeeze_score': round(stats.max_squeeze_score, 2) if stats.max_squeeze_score else 0,
+                    'high_risk_count': stats.high_risk_count or 0,
+                    'medium_risk_count': stats.medium_risk_count or 0,
+                    'low_risk_count': stats.low_risk_count or 0,
+                    'total_short_interest_records': stats.total_short_interest_records or 0,
+                    'avg_short_percent': round(stats.avg_short_percent, 2) if stats.avg_short_percent else 0,
+                    'max_short_percent': round(stats.max_short_percent, 2) if stats.max_short_percent else 0
+                }
+                
+        except Exception as e:
+            logger.error(f"Error getting short squeeze summary stats: {e}")
+            return {}
+    
+    def get_comprehensive_short_squeeze_data(self, symbol: str) -> Dict:
+        """
+        Get comprehensive short squeeze data for a single symbol
+        
+        Args:
+            symbol: Stock symbol
+            
+        Returns:
+            Dictionary containing all short squeeze related data
+        """
+        try:
+            result = {
+                'symbol': symbol,
+                'short_interest': self.get_short_interest_data(symbol),
+                'squeeze_score': self.get_short_squeeze_score(symbol),
+                'basic_info': self.get_stock_basic_info(symbol),
+                'profile': self.get_stock_company_profile(symbol)
+            }
+            
+            # Add availability flags
+            result['data_availability'] = {
+                'has_short_interest': result['short_interest'] is not None,
+                'has_squeeze_score': result['squeeze_score'] is not None,
+                'has_basic_info': result['basic_info'] is not None,
+                'has_profile': result['profile'] is not None
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting comprehensive short squeeze data for {symbol}: {e}")
+            return {'symbol': symbol, 'error': str(e)}
