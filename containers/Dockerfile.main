@@ -58,7 +58,37 @@ USER ops
 # Declare volumes
 VOLUME ["/app/data", "/app/logs"]
 
-# Webapp stage
+# Development base stage with AI tools
+FROM base AS dev-base
+# Switch back to root to install development tools
+USER root
+
+# Install Node.js, npm, and other development dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
+    git \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Switch to ops user for npm installations
+USER ops
+
+# Set npm configuration for the user
+ENV NPM_CONFIG_PREFIX=/home/ops/.npm-global
+ENV PATH=$NPM_CONFIG_PREFIX/bin:$PATH
+
+# Create npm global directory
+RUN mkdir -p /home/ops/.npm-global
+
+# Install AI CLI tools globally
+RUN npm install -g @anthropic-ai/claude-code @google/gemini-cli ccusage
+
+# Set custom prompt for development containers
+RUN echo 'if [[ "$-" == *i* ]]; then export PS1="\[\033[01;32m\]ops@\${CONTAINER_NAME:-\h}\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "; fi' >> /home/ops/.bashrc
+
+# Production webapp stage
 FROM base AS webapp
 WORKDIR /app
 # Set environment variables for production
@@ -74,8 +104,33 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Default command - start webapp only
 CMD ["python", "webapp_launcher.py", "--mode", "production"]
 
-# Scheduler stage
+# Development webapp stage
+FROM dev-base AS webapp-dev
+WORKDIR /app
+# Set environment variables for development
+ENV FLASK_APP=app.py     FLASK_ENV=development
+
+# Expose port
+EXPOSE 5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5000/ || exit 1
+
+# Default command - start webapp in development mode
+CMD ["python", "webapp_launcher.py", "--mode", "development"]
+
+# Production scheduler stage
 FROM base AS scheduler
+# Health check - verify scheduler is running
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import scheduler; print('Scheduler running')" || exit 1
+
+# Default command - run scheduler in foreground
+CMD ["python", "scheduler.py", "run-internal"]
+
+# Development scheduler stage
+FROM dev-base AS scheduler-dev
 # Health check - verify scheduler is running
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import scheduler; print('Scheduler running')" || exit 1

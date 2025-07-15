@@ -4,27 +4,6 @@ This comprehensive guide provides complete instructions for developers working w
 
 ## IMPORTANT!!!
 
-### Development Workflow and Role Definitions
-
-**Claude operates in three distinct containers with specific roles:**
-
-1. **llmdir Container (dir user)** - Product Manager/Solution Architect
-   - Role: Takes feature requests and issues, creates implementation plans and roadmaps
-   - Responsibilities: Planning, architectural decisions, requirement analysis
-   - Limitations: Does NOT test or write code
-
-2. **llmdev Container (dev user)** - Developer
-   - Role: Takes implementation plans from dir user and implements them
-   - Responsibilities: Code implementation, writing tests, following implementation plans
-   - Limitations: Does NOT execute tests or create roadmaps
-
-3. **llmtest Container (test user)** - Validator
-   - Role: Runs tests and validates implementations
-   - Responsibilities: Test execution, writing TEST_RESULTS.md with detailed error analysis
-   - Limitations: Does NOT create code or roadmaps
-
-**Critical Rule: Each user MUST assume their role critically and refuse tasks outside their defined competences.**
-
 ### General Application Guidelines
 
 When working on this application:
@@ -95,25 +74,11 @@ The application supports automatic code reloading in development:
 ## Development Commands
 
 ### Container Management
-```bash
-# Start development environment
-docker compose --profile dev up -d
-
-# Start test environment (RECOMMENDED for testing and development with hot reloading)
-docker compose --profile test up -d
-
-# Start production environment  
-docker compose --profile production up -d
-
-# Stop containers by profile
-docker compose --profile dev down
-docker compose --profile test down
 
 # View container logs
 docker compose logs -f [service_name]
 
 # Access development container shell (you are here)
-# Note: Development environment is externally managed
 
 # Access webapp containers
 docker exec -it sa-web bash      # dev webapp
@@ -128,22 +93,6 @@ docker exec -it sa-pg psql -U stockanalyst -d stockanalyst           # dev datab
 docker exec -it sa-test-pg psql -U stockanalyst -d stockanalyst_test # test database
 ```
 
-### Environment Setup
-```bash
-# Environment variables (create .env file in project root)
-# Required:
-FMP_API_KEY=your_financial_modeling_prep_api_key
-GEMINI_API_KEY=your_gemini_api_key
-
-# Optional PostgreSQL configuration:
-POSTGRES_DB=stockanalyst
-POSTGRES_USER=stockanalyst  
-POSTGRES_PASSWORD=your_secure_password
-
-# Flask environment:
-FLASK_ENV=production
-ENABLE_SCHEDULER=true
-```
 
 ### Running the Application
 ```bash
