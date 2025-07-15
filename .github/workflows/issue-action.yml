@@ -9,9 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: read
+      issues: write
       pull-requests: write
       id-token: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,13 +34,22 @@ jobs:
           echo "PATH=$PATH" >> $GITHUB_ENV
           echo "SHELL=/bin/bash" >> $GITHUB_ENV
 
+      - name: Setup GitHub CLI
+        shell: bash
+        run: |
+          # GitHub CLI is pre-installed on ubuntu-latest
+          gh --version
+          echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
+
       - name: Automatic Issue Implementation
         uses: anthropics/claude-code-action@beta
         env:
           SHELL: /bin/bash
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           timeout_minutes: "120"
+          allowed_tools: "mcp__github__create_pull_request,mcp__github__create_issue_comment,mcp__github__get_issue,mcp__github__get_repository"
           direct_prompt: |
             Review this issue carefully. Create a new branch to work on, make an implementation plan and use it to solve the issue. Once you are confident with the change, commit the branch, push it and create a pull request.
             
@@ -57,8 +67,8 @@ jobs:
             5. Test your implementation thoroughly
             6. Run linting and type checking if applicable
             7. Commit your changes with a clear, descriptive commit message
-            8. Push the branch to the remote repository
-            9. Create a pull request that references the original issue
+            8. Push the branch to the remote repository using: git push -u origin branch-name
+            9. Create a pull request using the GitHub API tools (mcp__github__create_pull_request) that references the original issue
             
             Guidelines:
             - Follow the existing code style and architecture patterns
@@ -67,5 +77,16 @@ jobs:
             - Ensure the solution is complete and production-ready
             - Use the project's established tools and frameworks
             - Reference the original issue in your pull request (Closes #${{ github.event.issue.number }})
+            
+            Available GitHub Tools:
+            - Use mcp__github__create_pull_request to create the pull request
+            - Use mcp__github__create_issue_comment to add comments to the issue if needed
+            - Use mcp__github__get_issue to get additional issue information
+            - You also have access to git commands and GitHub CLI (gh) for repository operations
+            
+            Repository Information:
+            - Repository: ${{ github.repository }}
+            - Base Branch: ${{ github.event.repository.default_branch }}
+            - Issue URL: ${{ github.event.issue.html_url }}
             
             If you encounter any blockers or need clarification, create a comment on the issue explaining what additional information is needed.
