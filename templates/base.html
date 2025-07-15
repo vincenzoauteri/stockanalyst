@@ -76,21 +76,41 @@
             border-color: var(--light-border);
         }
         
-        .form-control, .form-select {
-            background-color: var(--light-bg) !important;
-            border-color: var(--light-border) !important;
-            color: var(--light-text) !important;
+        [data-theme="dark"] .form-control,
+        [data-theme="dark"] .form-select,
+        [data-theme="dark"] input.form-control,
+        [data-theme="dark"] select.form-select {
+            background-color: #343a40 !important;
+            border-color: #495057 !important;
+            color: #ffffff !important;
         }
         
-        .form-control:focus, .form-select:focus {
-            background-color: var(--light-bg) !important;
-            border-color: var(--primary-color) !important;
-            color: var(--light-text) !important;
+        [data-theme="dark"] .form-control:focus,
+        [data-theme="dark"] .form-select:focus,
+        [data-theme="dark"] input.form-control:focus,
+        [data-theme="dark"] select.form-select:focus {
+            background-color: #343a40 !important;
+            border-color: #3498db !important;
+            color: #ffffff !important;
             box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25) !important;
         }
         
         .bg-light {
             background-color: var(--light-card-bg) !important;
+        }
+        
+        /* Navbar styling */
+        .navbar {
+            background-color: var(--light-bg) !important;
+        }
+        
+        [data-theme="dark"] .navbar {
+            background-color: var(--light-card-bg) !important;
+        }
+        
+        [data-theme="dark"] .navbar-brand,
+        [data-theme="dark"] .nav-link {
+            color: var(--light-text) !important;
         }
         
         .border-bottom {
@@ -204,7 +224,7 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+    <nav class="navbar navbar-expand-lg border-bottom">
         <div class="container">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="fas fa-chart-line me-2"></i>Stock Analyst

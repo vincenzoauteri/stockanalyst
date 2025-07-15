@@ -211,37 +211,72 @@ class DarkModeSeleniumTest:
         """Test form controls styling in dark mode"""
         print("\n📝 Testing Form Controls Dark Mode Styling...")
         
-        # Find form controls
-        form_controls = self.driver.find_elements(By.CSS_SELECTOR, ".form-control, .form-select, input, select")
+        # Wait a bit more for page to load completely
+        time.sleep(2)
         
-        if not form_controls:
-            print("✗ No form controls found")
-            return False
+        # Test specific form controls we know exist
+        test_results = []
         
-        print(f"✓ Found {len(form_controls)} form controls")
+        # Test search input
+        try:
+            search_input = self.driver.find_element(By.ID, "searchInput")
+            print("✓ Found search input")
+            
+            bg_color = self.get_computed_style(search_input, "background-color")
+            text_color = self.get_computed_style(search_input, "color")
+            border_color = self.get_computed_style(search_input, "border-color")
+            
+            print(f"  Search Input - Background: {bg_color}, Text: {text_color}, Border: {border_color}")
+            
+            # Check for dark mode styling
+            dark_bg = "rgb(33, 37, 41)" in bg_color
+            light_text = "rgb(255, 255, 255)" in text_color
+            dark_border = "rgb(73, 80, 87)" in border_color
+            
+            if dark_bg and light_text and dark_border:
+                print("  ✓ Search input has correct dark mode styling")
+                test_results.append(True)
+            else:
+                print("  ✗ Search input does not have correct dark mode styling")
+                test_results.append(False)
+                
+        except Exception as e:
+            print(f"  ✗ Could not test search input: {e}")
+            test_results.append(False)
         
-        # Test first form control
-        control = form_controls[0]
-        bg_color = self.get_computed_style(control, "background-color")
-        text_color = self.get_computed_style(control, "color")
-        border_color = self.get_computed_style(control, "border-color")
+        # Test sector filter
+        try:
+            sector_filter = self.driver.find_element(By.ID, "sectorFilter")
+            print("✓ Found sector filter")
+            
+            bg_color = self.get_computed_style(sector_filter, "background-color")
+            text_color = self.get_computed_style(sector_filter, "color")
+            border_color = self.get_computed_style(sector_filter, "border-color")
+            
+            print(f"  Sector Filter - Background: {bg_color}, Text: {text_color}, Border: {border_color}")
+            
+            # Check for dark mode styling
+            dark_bg = "rgb(33, 37, 41)" in bg_color
+            light_text = "rgb(255, 255, 255)" in text_color
+            dark_border = "rgb(73, 80, 87)" in border_color
+            
+            if dark_bg and light_text and dark_border:
+                print("  ✓ Sector filter has correct dark mode styling")
+                test_results.append(True)
+            else:
+                print("  ✗ Sector filter does not have correct dark mode styling")
+                test_results.append(False)
+                
+        except Exception as e:
+            print(f"  ✗ Could not test sector filter: {e}")
+            test_results.append(False)
         
-        print(f"Form control - Background: {bg_color}, Text: {text_color}, Border: {border_color}")
-        
-        # In dark mode, should have dark background and light text
-        # Check for various dark backgrounds: rgb(33, 37, 41) or rgb(52, 58, 64)
-        dark_bg_check = ("rgb(33, 37, 41)" in bg_color or "rgb(52, 58, 64)" in bg_color or "212529" in bg_color or "343a40" in bg_color)
-        light_text_check = ("rgb(255, 255, 255)" in text_color or "ffffff" in text_color)
-        dark_border_check = ("rgb(73, 80, 87)" in border_color or "495057" in border_color)
-        
-        if dark_bg_check and light_text_check and dark_border_check:
-            print("✓ Form controls have dark mode styling")
+        # Overall result
+        if all(test_results) and test_results:
+            print("\n✓ All form controls have dark mode styling")
             return True
         else:
-            print(f"✗ Form controls do not have dark mode styling")
-            print(f"  Dark background: {dark_bg_check}")
-            print(f"  Light text: {light_text_check}")
-            print(f"  Dark border: {dark_border_check}")
+            print("\n✗ Some form controls do not have dark mode styling")
             return False
     
     def test_overall_theme(self):
