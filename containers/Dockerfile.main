@@ -38,6 +38,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Create non-root user for security
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG DOCKER_GID=999
 RUN groupadd --gid ${USER_GID} ops \
     && useradd --uid ${USER_UID} --gid ${USER_GID} --shell /bin/bash --create-home ops
 
@@ -71,6 +72,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Docker using the official installation script
+RUN curl -fsSL https://get.docker.com -o get-docker.sh \
+    && sh ./get-docker.sh \
+    && rm get-docker.sh \
+    && if [ "$(getent group docker | cut -d: -f3)" != "${DOCKER_GID}" ]; then \
+         if getent group ${DOCKER_GID} >/dev/null 2>&1; then \
+           groupdel $(getent group ${DOCKER_GID} | cut -d: -f1) || true; \
+         fi; \
+         groupmod -g ${DOCKER_GID} docker; \
+       fi \
+    && usermod -aG docker ops
 
 # Switch to ops user for npm installations
 USER ops

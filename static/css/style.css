@@ -8,14 +8,14 @@
     --danger-color: #e74c3c;
     --warning-color: #f39c12;
     --info-color: #17a2b8;
-    --light-bg: #f8f9fa;
+    --card-bg: #f8f9fa;
     --dark-text: #2c3e50;
 }
 
 /* Global Styles */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--light-bg);
+    background-color: var(--bg-color);
     color: var(--dark-text);
 }
 
@@ -38,7 +38,7 @@ body {
 .card {
     border: none;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
+    transition: box-shadow 0.3s ease;
 }
 
 .card:hover {
@@ -59,6 +59,11 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
     color: white;
+}
+
+/* Dark mode metric cards - keep same gradient but adjust slightly for dark theme */
+[data-theme="dark"] .metric-card {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4598 100%);
 }
 
 .metric-card .card-body {
@@ -103,9 +108,14 @@ body {
     transition: background-color 0.2s ease;
 }
 
+/* Dark mode table hover */
+[data-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
+}
+
 /* Make entire row appear clickable */
 #stockList tbody tr {
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 #stockList tbody tr:hover {
@@ -114,12 +124,39 @@ body {
     transform: translateY(-1px);
 }
 
+/* Dark mode stock list hover */
+[data-theme="dark"] #stockList tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(255,255,255,0.1);
+}
+
 .table thead th {
     border-top: none;
     border-bottom: 2px solid #dee2e6;
     font-weight: 600;
     background-color: #f8f9fa;
     color: var(--dark-text);
+}
+
+/* Dark mode table headers */
+[data-theme="dark"] .table thead th {
+    background-color: var(--card-bg);
+    border-bottom-color: #495057;
+    color: var(--text-color);
+}
+
+/* Dark mode table borders */
+[data-theme="dark"] .table td {
+    border-top-color: #495057;
+}
+
+/* Row hover class for JavaScript */
+.row-hover {
+    background-color: #f8f9fa !important;
+}
+
+[data-theme="dark"] .row-hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
 }
 
 /* Stock Table Specific Styles */
@@ -140,7 +177,7 @@ body {
 .btn {
     border-radius: 6px;
     font-weight: 500;
-    transition: all 0.3s ease;
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .btn:hover {
@@ -166,12 +203,30 @@ body {
 /* Search and Filter */
 .form-control, .form-select {
     border-radius: 6px;
-    border: 1px solid #ced4da;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .form-control:focus, .form-select:focus {
-    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* Dark mode form controls */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] input.form-control,
+[data-theme="dark"] select.form-select {
+    background-color: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus,
+[data-theme="dark"] input.form-control:focus,
+[data-theme="dark"] select.form-select:focus {
+    background-color: var(--card-bg) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--text-color) !important;
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
@@ -215,6 +270,11 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 1000;
+}
+
+/* Dark mode loading overlay */
+[data-theme="dark"] .loading-overlay {
+    background: rgba(33, 37, 41, 0.8);
 }
 
 /* Animations */
@@ -279,10 +339,144 @@ body {
     width: 100%;
 }
 
+/* Modal Dark Mode Styling */
+[data-theme="dark"] .modal-content {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: #495057;
+}
+
+[data-theme="dark"] .modal-header {
+    border-bottom-color: #495057;
+}
+
+[data-theme="dark"] .modal-footer {
+    border-top-color: #495057;
+}
+
+[data-theme="dark"] .modal-title {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .btn-close {
+    filter: invert(1);
+}
+
+[data-theme="dark"] .btn-close-white {
+    filter: none;
+}
+
+/* Dark mode table styling */
+[data-theme="dark"] .table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-color);
+    --bs-table-border-color: #495057;
+    --bs-table-hover-bg: rgba(52, 152, 219, 0.15);
+    --bs-table-hover-color: var(--text-color);
+}
+
+/* Dark mode card styling */
+[data-theme="dark"] .card {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .card-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom-color: var(--border-color);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .card-footer {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-top-color: var(--border-color);
+}
+
+/* Dark mode pagination */
+[data-theme="dark"] .pagination .page-link {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .pagination .page-link:hover {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+[data-theme="dark"] .pagination .page-item.active .page-link {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+[data-theme="dark"] .pagination .page-item.disabled .page-link {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: #6c757d;
+}
+
+/* Dark mode badges */
+[data-theme="dark"] .badge.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+[data-theme="dark"] .badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Dark mode text colors */
+[data-theme="dark"] .text-muted {
+    color: #adb5bd !important;
+}
+
+/* Dark mode breadcrumb */
+[data-theme="dark"] .breadcrumb {
+    background-color: transparent;
+}
+
+[data-theme="dark"] .breadcrumb-item + .breadcrumb-item::before {
+    color: #adb5bd;
+}
+
+[data-theme="dark"] .breadcrumb-item a {
+    color: var(--primary-color);
+}
+
+[data-theme="dark"] .breadcrumb-item.active {
+    color: var(--text-color);
+}
+
+/* Dark mode modal backdrop and specific modal styles */
+[data-theme="dark"] .modal-backdrop {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="dark"] .modal-header.bg-danger {
+    background-color: var(--danger-color) !important;
+}
+
+[data-theme="dark"] .modal .card {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .modal .border-danger {
+    border-color: var(--danger-color) !important;
+}
+
 /* Footer */
 footer {
     background-color: #f8f9fa !important;
     border-top: 1px solid #dee2e6 !important;
+}
+
+/* Dark mode footer */
+[data-theme="dark"] footer {
+    background-color: var(--card-bg) !important;
+    border-top-color: #495057 !important;
 }
 
 /* Utilities */
@@ -341,6 +535,11 @@ footer {
     background-color: #e9ecef;
     border-radius: 4px;
     position: relative;
+}
+
+/* Dark mode football field bars */
+[data-theme="dark"] .ff-bar-container {
+    background-color: #495057;
 }
 
 .ff-bar {
