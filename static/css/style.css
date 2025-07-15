@@ -61,6 +61,11 @@ body {
     color: white;
 }
 
+/* Dark mode metric cards - keep same gradient but adjust slightly for dark theme */
+[data-theme="dark"] .metric-card {
+    background: linear-gradient(135deg, #5a6fd8 0%, #6a4598 100%);
+}
+
 .metric-card .card-body {
     padding: 1.5rem;
 }
@@ -103,6 +108,11 @@ body {
     transition: background-color 0.2s ease;
 }
 
+/* Dark mode table hover */
+[data-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
+}
+
 /* Make entire row appear clickable */
 #stockList tbody tr {
     transition: all 0.2s ease;
@@ -114,12 +124,39 @@ body {
     transform: translateY(-1px);
 }
 
+/* Dark mode stock list hover */
+[data-theme="dark"] #stockList tbody tr:hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(255,255,255,0.1);
+}
+
 .table thead th {
     border-top: none;
     border-bottom: 2px solid #dee2e6;
     font-weight: 600;
     background-color: #f8f9fa;
     color: var(--dark-text);
+}
+
+/* Dark mode table headers */
+[data-theme="dark"] .table thead th {
+    background-color: var(--light-card-bg);
+    border-bottom-color: #495057;
+    color: var(--light-text);
+}
+
+/* Dark mode table borders */
+[data-theme="dark"] .table td {
+    border-top-color: #495057;
+}
+
+/* Row hover class for JavaScript */
+.row-hover {
+    background-color: #f8f9fa !important;
+}
+
+[data-theme="dark"] .row-hover {
+    background-color: rgba(52, 152, 219, 0.2) !important;
 }
 
 /* Stock Table Specific Styles */
@@ -175,6 +212,21 @@ body {
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
 }
 
+/* Dark mode form controls */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    background-color: var(--light-card-bg);
+    border-color: #495057;
+    color: var(--light-text);
+}
+
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+    background-color: var(--light-card-bg);
+    border-color: var(--secondary-color);
+    color: var(--light-text);
+}
+
 /* Tab Navigation */
 .nav-tabs {
     border-bottom: 2px solid #dee2e6;
@@ -215,6 +267,11 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 1000;
+}
+
+/* Dark mode loading overlay */
+[data-theme="dark"] .loading-overlay {
+    background: rgba(33, 37, 41, 0.8);
 }
 
 /* Animations */
@@ -279,10 +336,39 @@ body {
     width: 100%;
 }
 
+/* Modal Dark Mode Styling */
+[data-theme="dark"] .modal-content {
+    background-color: var(--light-card-bg);
+    color: var(--light-text);
+    border-color: #495057;
+}
+
+[data-theme="dark"] .modal-header {
+    border-bottom-color: #495057;
+}
+
+[data-theme="dark"] .modal-footer {
+    border-top-color: #495057;
+}
+
+[data-theme="dark"] .modal-title {
+    color: var(--light-text);
+}
+
+[data-theme="dark"] .btn-close {
+    filter: invert(1);
+}
+
 /* Footer */
 footer {
     background-color: #f8f9fa !important;
     border-top: 1px solid #dee2e6 !important;
+}
+
+/* Dark mode footer */
+[data-theme="dark"] footer {
+    background-color: var(--light-card-bg) !important;
+    border-top-color: #495057 !important;
 }
 
 /* Utilities */
@@ -341,6 +427,11 @@ footer {
     background-color: #e9ecef;
     border-radius: 4px;
     position: relative;
+}
+
+/* Dark mode football field bars */
+[data-theme="dark"] .ff-bar-container {
+    background-color: #495057;
 }
 
 .ff-bar {

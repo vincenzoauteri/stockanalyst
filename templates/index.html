@@ -51,7 +51,7 @@
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th scope="col" width="10%" class="sortable" data-sort="symbol">
                             <span class="text-nowrap">
@@ -427,11 +427,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         item.addEventListener('mouseenter', function() {
-            this.style.backgroundColor = '#f8f9fa';
+            // Use CSS classes instead of hardcoded colors for dark mode compatibility
+            this.classList.add('row-hover');
         });
         
         item.addEventListener('mouseleave', function() {
-            this.style.backgroundColor = '';
+            this.classList.remove('row-hover');
         });
     });
 });
