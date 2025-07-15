@@ -682,6 +682,32 @@ def api_internal_error(error):
         'message': 'An unexpected error occurred'
     }), 500
 
+@api_v2.route('/symbols', methods=['GET'])
+def get_symbols():
+    """
+    Get all available S&P 500 stock symbols for autocomplete/selection
+    
+    Returns:
+        JSON: List of all S&P 500 stock symbols
+    """
+    try:
+        service = get_stock_service()
+        symbols = service.db_manager.get_sp500_symbols()
+        
+        return jsonify({
+            'success': True,
+            'data': symbols,
+            'count': len(symbols)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error retrieving symbols: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error',
+            'message': 'Failed to retrieve stock symbols'
+        }), 500
+
 @api_v2.route('/compare')
 def compare_stocks():
     """

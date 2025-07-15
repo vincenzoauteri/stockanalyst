@@ -28,26 +28,33 @@
                 <h5 class="card-title">
                     <i class="fas fa-search me-2"></i>Select Stocks to Compare
                 </h5>
-                <form method="GET" action="{{ url_for('stock_comparison') }}">
-                    <div class="row">
-                        <div class="col-md-8">
-                            <input type="text" 
-                                   class="form-control" 
-                                   name="symbols" 
-                                   placeholder="Enter 2-5 stock symbols separated by commas (e.g., AAPL,MSFT,GOOGL)" 
-                                   value="{{ ','.join(symbols) if symbols else '' }}"
-                                   id="symbolsInput">
-                            <small class="form-text text-muted">
-                                Enter stock symbols separated by commas. Maximum 5 stocks.
-                            </small>
-                        </div>
-                        <div class="col-md-4">
-                            <button type="submit" class="btn btn-primary">
+                <form method="GET" action="{{ url_for('stock_comparison') }}" id="comparisonForm">
+                    <div id="stockInputs">
+                        <!-- Stock input rows will be added here dynamically -->
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button type="button" class="btn btn-outline-primary me-2" onclick="addStockInput()" id="addStockBtn">
+                                <i class="fas fa-plus me-1"></i>Add Stock
+                            </button>
+                            <button type="submit" class="btn btn-primary me-2" id="compareBtn" disabled>
                                 <i class="fas fa-search me-1"></i>Compare
                             </button>
-                            <button type="button" class="btn btn-outline-secondary ms-2" onclick="clearComparison()">
-                                <i class="fas fa-times me-1"></i>Clear
+                            <button type="button" class="btn btn-outline-secondary" onclick="clearAllStocks()">
+                                <i class="fas fa-times me-1"></i>Clear All
                             </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden input to store symbols for form submission -->
+                    <input type="hidden" name="symbols" id="hiddenSymbols">
+                    
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <small class="form-text text-muted">
+                                Select 2-5 S&P 500 stocks to compare. Use the dropdown to select valid symbols.
+                            </small>
                         </div>
                     </div>
                 </form>
@@ -369,14 +376,162 @@
 {% endif %}
 
 <script>
-function clearComparison() {
-    document.getElementById('symbolsInput').value = '';
-    window.location.href = '{{ url_for("stock_comparison") }}';
+let stockCount = 0;
+let availableSymbols = [];
+const maxStocks = 5;
+
+// Load S&P 500 symbols when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadSymbols();
+    initializeStocks();
+});
+
+async function loadSymbols() {
+    try {
+        const response = await fetch('/api/v2/symbols');
+        const data = await response.json();
+        if (data.success) {
+            availableSymbols = data.data.sort();
+        } else {
+            console.error('Failed to load symbols:', data.message);
+        }
+    } catch (error) {
+        console.error('Error loading symbols:', error);
+    }
 }
 
-// Auto-uppercase input
-document.getElementById('symbolsInput').addEventListener('input', function(e) {
-    e.target.value = e.target.value.toUpperCase();
+function initializeStocks() {
+    // Parse existing symbols from URL if any
+    const urlParams = new URLSearchParams(window.location.search);
+    const existingSymbols = urlParams.get('symbols');
+    
+    if (existingSymbols) {
+        const symbols = existingSymbols.split(',').map(s => s.trim()).filter(s => s);
+        symbols.forEach((symbol, index) => {
+            if (index < maxStocks) {
+                addStockInput(symbol);
+            }
+        });
+    } else {
+        // Add two empty inputs by default
+        addStockInput();
+        addStockInput();
+    }
+    
+    updateCompareButtonState();
+}
+
+function addStockInput(selectedSymbol = '') {
+    if (stockCount >= maxStocks) {
+        return;
+    }
+    
+    stockCount++;
+    const stockInputs = document.getElementById('stockInputs');
+    
+    const row = document.createElement('div');
+    row.className = 'row mb-2';
+    row.id = `stockRow${stockCount}`;
+    
+    row.innerHTML = `
+        <div class="col-md-6">
+            <label for="stock${stockCount}" class="form-label">Stock ${stockCount}:</label>
+            <select class="form-select stock-select" id="stock${stockCount}" onchange="updateSymbols()">
+                <option value="">Select a stock symbol...</option>
+                ${availableSymbols.map(symbol => 
+                    `<option value="${symbol}" ${symbol === selectedSymbol ? 'selected' : ''}>${symbol}</option>`
+                ).join('')}
+            </select>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+            <button type="button" class="btn btn-outline-danger" onclick="removeStockInput(${stockCount})">
+                <i class="fas fa-times me-1"></i>Remove
+            </button>
+        </div>
+    `;
+    
+    stockInputs.appendChild(row);
+    
+    // Update button states
+    updateAddButtonState();
+    updateCompareButtonState();
+}
+
+function removeStockInput(rowNumber) {
+    const row = document.getElementById(`stockRow${rowNumber}`);
+    if (row) {
+        row.remove();
+        stockCount--;
+        updateSymbols();
+        updateAddButtonState();
+        updateCompareButtonState();
+    }
+}
+
+function updateAddButtonState() {
+    const addBtn = document.getElementById('addStockBtn');
+    addBtn.disabled = stockCount >= maxStocks;
+    
+    if (stockCount >= maxStocks) {
+        addBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Maximum Reached';
+    } else {
+        addBtn.innerHTML = '<i class="fas fa-plus me-1"></i>Add Stock';
+    }
+}
+
+function updateCompareButtonState() {
+    const compareBtn = document.getElementById('compareBtn');
+    const selectedStocks = getSelectedSymbols();
+    compareBtn.disabled = selectedStocks.length < 2;
+}
+
+function getSelectedSymbols() {
+    const selects = document.querySelectorAll('.stock-select');
+    const symbols = [];
+    
+    selects.forEach(select => {
+        if (select.value) {
+            symbols.push(select.value);
+        }
+    });
+    
+    return symbols;
+}
+
+function updateSymbols() {
+    const symbols = getSelectedSymbols();
+    document.getElementById('hiddenSymbols').value = symbols.join(',');
+    updateCompareButtonState();
+}
+
+function clearAllStocks() {
+    document.getElementById('stockInputs').innerHTML = '';
+    stockCount = 0;
+    addStockInput();
+    addStockInput();
+    updateAddButtonState();
+    updateCompareButtonState();
+}
+
+// Form submission handler
+document.getElementById('comparisonForm').addEventListener('submit', function(e) {
+    const symbols = getSelectedSymbols();
+    if (symbols.length < 2) {
+        e.preventDefault();
+        alert('Please select at least 2 stocks to compare.');
+        return;
+    }
+    
+    // Check for duplicates
+    const uniqueSymbols = [...new Set(symbols)];
+    if (uniqueSymbols.length !== symbols.length) {
+        e.preventDefault();
+        alert('Please select different stocks. Duplicate symbols are not allowed.');
+        return;
+    }
+    
+    // Update hidden input with final symbols
+    document.getElementById('hiddenSymbols').value = uniqueSymbols.join(',');
 });
 </script>
 {% endblock %}
