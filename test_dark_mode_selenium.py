@@ -20,24 +20,45 @@ class DarkModeSeleniumTest:
         self.driver = None
         
     def setup_driver(self):
-        """Setup Chrome driver with Selenium Grid"""
+        """Setup Chrome driver with Selenium Grid and fallback options"""
         chrome_options = Options()
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         
+        # Try multiple Selenium Grid endpoints
+        selenium_endpoints = [
+            'http://stockdev-selenium-chrome-1:4444/wd/hub',
+            'http://selenium-chrome:4444/wd/hub',
+            'http://localhost:4444/wd/hub'
+        ]
+        
+        for endpoint in selenium_endpoints:
+            try:
+                print(f"Attempting to connect to Selenium Grid at {endpoint}...")
+                self.driver = webdriver.Remote(
+                    command_executor=endpoint,
+                    options=chrome_options
+                )
+                print(f"✓ Chrome driver connected to Selenium Grid at {endpoint} successfully")
+                return True
+            except Exception as e:
+                print(f"✗ Failed to connect to {endpoint}: {e}")
+                continue
+        
+        # Fallback: Try local Chrome driver
         try:
-            # Connect to existing Selenium container
-            self.driver = webdriver.Remote(
-                command_executor='http://stockdev-selenium-chrome-1:4444/wd/hub',
-                options=chrome_options
-            )
-            print("✓ Chrome driver connected to Selenium Grid successfully")
+            print("Attempting to use local Chrome driver as fallback...")
+            chrome_options.add_argument("--headless")  # Run headless for CI environments
+            self.driver = webdriver.Chrome(options=chrome_options)
+            print("✓ Local Chrome driver initialized successfully")
             return True
         except Exception as e:
-            print(f"✗ Failed to connect to Selenium Grid: {e}")
-            return False
+            print(f"✗ Failed to initialize local Chrome driver: {e}")
+        
+        print("✗ All Selenium driver options failed")
+        return False
     
     def wait_for_element(self, by, value, timeout=10):
         """Wait for element to be present and return it"""

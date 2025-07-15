@@ -22,10 +22,10 @@
             --danger-color: #e74c3c;
             --warning-color: #f39c12;
             --info-color: #17a2b8;
-            --light-bg: #ffffff;
-            --light-text: #212529;
-            --light-border: #dee2e6;
-            --light-card-bg: #f8f9fa;
+            --bg-color: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --card-bg: #f8f9fa;
         }
         
         [data-theme="dark"] {
@@ -35,26 +35,26 @@
             --danger-color: #dc3545;
             --warning-color: #ffc107;
             --info-color: #17a2b8;
-            --light-bg: #212529;
-            --light-text: #ffffff;
-            --light-border: #495057;
-            --light-card-bg: #343a40;
+            --bg-color: #212529;
+            --text-color: #ffffff;
+            --border-color: #495057;
+            --card-bg: #343a40;
         }
         
         body {
-            background-color: var(--light-bg);
-            color: var(--light-text);
+            background-color: var(--bg-color);
+            color: var(--text-color);
             transition: background-color 0.3s ease, color 0.3s ease;
         }
         
         .navbar-light {
-            background-color: var(--light-card-bg) !important;
-            border-color: var(--light-border) !important;
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
         }
         
         .navbar-light .navbar-brand,
         .navbar-light .navbar-nav .nav-link {
-            color: var(--light-text) !important;
+            color: var(--text-color) !important;
         }
         
         .navbar-light .navbar-nav .nav-link:hover {
@@ -62,63 +62,45 @@
         }
         
         .card {
-            background-color: var(--light-card-bg);
-            border-color: var(--light-border);
-            color: var(--light-text);
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+            color: var(--text-color);
         }
         
         .table {
-            color: var(--light-text);
+            color: var(--text-color);
         }
         
         .table-light {
-            background-color: var(--light-card-bg);
-            border-color: var(--light-border);
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
         }
         
-        [data-theme="dark"] .form-control,
-        [data-theme="dark"] .form-select,
-        [data-theme="dark"] input.form-control,
-        [data-theme="dark"] select.form-select {
-            background-color: #343a40 !important;
-            border-color: #495057 !important;
-            color: #ffffff !important;
-        }
-        
-        [data-theme="dark"] .form-control:focus,
-        [data-theme="dark"] .form-select:focus,
-        [data-theme="dark"] input.form-control:focus,
-        [data-theme="dark"] select.form-select:focus {
-            background-color: #343a40 !important;
-            border-color: #3498db !important;
-            color: #ffffff !important;
-            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25) !important;
-        }
         
         .bg-light {
-            background-color: var(--light-card-bg) !important;
+            background-color: var(--card-bg) !important;
         }
         
         /* Navbar styling */
         .navbar {
-            background-color: var(--light-bg) !important;
+            background-color: var(--bg-color) !important;
         }
         
         [data-theme="dark"] .navbar {
-            background-color: var(--light-card-bg) !important;
+            background-color: var(--card-bg) !important;
         }
         
         [data-theme="dark"] .navbar-brand,
         [data-theme="dark"] .nav-link {
-            color: var(--light-text) !important;
+            color: var(--text-color) !important;
         }
         
         .border-bottom {
-            border-color: var(--light-border) !important;
+            border-color: var(--border-color) !important;
         }
         
         .border-top {
-            border-color: var(--light-border) !important;
+            border-color: var(--border-color) !important;
         }
         
         .text-muted {
@@ -126,27 +108,27 @@
         }
         
         .dropdown-menu {
-            background-color: var(--light-card-bg);
-            border-color: var(--light-border);
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
         }
         
         .dropdown-item {
-            color: var(--light-text);
+            color: var(--text-color);
         }
         
         .dropdown-item:hover {
-            background-color: var(--light-bg);
-            color: var(--light-text);
+            background-color: var(--bg-color);
+            color: var(--text-color);
         }
         
         .alert {
-            border-color: var(--light-border);
+            border-color: var(--border-color);
         }
         
         .dark-mode-toggle {
             background: none;
             border: none;
-            color: var(--light-text);
+            color: var(--text-color);
             font-size: 1.2rem;
             cursor: pointer;
             transition: color 0.3s ease;

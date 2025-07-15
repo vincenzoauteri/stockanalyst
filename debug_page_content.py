@@ -4,6 +4,7 @@ Debug script to see what's actually on the page
 """
 
 import time
+import os
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -16,14 +17,36 @@ def debug_page_content():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     
-    driver = webdriver.Remote(
-        command_executor='http://stockdev-selenium-chrome-1:4444/wd/hub',
-        options=chrome_options
-    )
+    # Try multiple Selenium endpoints with fallback
+    selenium_endpoints = [
+        'http://stockdev-selenium-chrome-1:4444/wd/hub',
+        'http://selenium-chrome:4444/wd/hub',
+        'http://localhost:4444/wd/hub'
+    ]
+    
+    driver = None
+    for endpoint in selenium_endpoints:
+        try:
+            print(f"Attempting connection to {endpoint}...")
+            driver = webdriver.Remote(
+                command_executor=endpoint,
+                options=chrome_options
+            )
+            print(f"Connected to Selenium Grid at {endpoint}")
+            break
+        except Exception as e:
+            print(f"Failed to connect to {endpoint}: {e}")
+            continue
+    
+    if not driver:
+        print("Selenium Grid unavailable, using local Chrome driver...")
+        chrome_options.add_argument("--headless")
+        driver = webdriver.Chrome(options=chrome_options)
     
     try:
         # Navigate to page
-        driver.get("http://172.17.0.1:5000")
+        webapp_url = os.getenv('WEBAPP_URL', 'http://webapp:5000')
+        driver.get(webapp_url)
         time.sleep(3)  # Wait for page to fully load
         
         print("=== PAGE SOURCE SAMPLE ===")
