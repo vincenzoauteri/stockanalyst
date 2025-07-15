@@ -11,7 +11,7 @@ class BaseConfig:
     """Base configuration with all settings"""
     
     # Application Configuration
-    APP_VERSION = "0.0.31"
+    APP_VERSION = "0.0.32"
     
     # API Configuration
     FMP_API_KEY = os.getenv('FMP_API_KEY')

@@ -462,10 +462,11 @@ class StockDataService:
         Get sector-level analysis with aggregated undervaluation scores
         
         Returns:
-            List of dictionaries containing sector analysis
+            List of dictionaries containing sector analysis with template-compatible structure
         """
         try:
             with self.db_manager.engine.connect() as conn:
+                # Get sector-level aggregated data
                 query = text("""
                     SELECT 
                         s.sector,
@@ -487,7 +488,42 @@ class StockDataService:
                 result = conn.execute(query)
                 sectors = result.fetchall()
                 
-                return [dict(sector._mapping) for sector in sectors]
+                # Transform data to match template expectations
+                sector_analysis = []
+                for sector in sectors:
+                    sector_dict = dict(sector._mapping)
+                    
+                    # Get symbols for this sector (limit to 10 for display)
+                    symbols_query = text("""
+                        SELECT s.symbol 
+                        FROM sp500_constituents s
+                        LEFT JOIN undervaluation_scores u ON s.symbol = u.symbol
+                        WHERE s.sector = :sector
+                        ORDER BY u.undervaluation_score DESC NULLS LAST
+                        LIMIT 10
+                    """)
+                    symbols_result = conn.execute(symbols_query, {"sector": sector_dict['sector']})
+                    symbols = [row[0] for row in symbols_result.fetchall()]
+                    
+                    # Transform to template-compatible structure
+                    transformed_sector = {
+                        'sector': sector_dict['sector'],
+                        'name': sector_dict['sector'],  # Template expects 'name' field
+                        'stock_count': sector_dict['total_stocks'],  # Template expects 'stock_count'
+                        'total_stocks': sector_dict['total_stocks'],  # Keep original for compatibility
+                        'stocks_with_scores': sector_dict['stocks_with_scores'],
+                        'avg_undervaluation_score': sector_dict['avg_undervaluation_score'],
+                        'avg_valuation_score': sector_dict['avg_valuation_score'],
+                        'avg_quality_score': sector_dict['avg_quality_score'], 
+                        'avg_strength_score': sector_dict['avg_strength_score'],
+                        'avg_price': sector_dict['avg_price'],
+                        'avg_market_cap': sector_dict['avg_market_cap'],
+                        'symbols': symbols  # Template expects 'symbols' list
+                    }
+                    
+                    sector_analysis.append(transformed_sector)
+                
+                return sector_analysis
                 
         except Exception as e:
             logger.error(f"Error getting sector analysis: {e}")
