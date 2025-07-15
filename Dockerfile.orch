@@ -1,0 +1,75 @@
+# This is a reusable base Dockerfile for all LLM environments.
+# It uses build arguments to customize the user and group.
+
+# Use an ARG for the base image for more flexibility
+ARG BASE_IMAGE=alpine:latest
+FROM ${BASE_IMAGE}
+
+# Add ARGs for user/group details. These will be passed from docker-compose.
+ARG USERNAME=dev
+ENV USERNAME=${USERNAME}
+ARG USER_UID=1000
+ARG USER_GID=1000
+ARG DOCKER_GID=999
+
+# Create the docker group with the host's GID before installing docker.
+RUN addgroup -g ${DOCKER_GID} docker
+
+# Install basic dependencies and Docker in a single layer to optimize image size.
+RUN apk update && apk add --no-cache \
+    curl \
+    wget \
+    bash \
+    git \
+    sudo \
+    nodejs \
+    npm \
+    python3 \
+    py3-pip \
+    python3-dev \
+    py3-pip-tools \
+    github-cli \
+    ca-certificates \
+    openssl \
+    docker \
+    docker-cli-compose
+
+# Create a non-root user with a proper home directory to enhance security.
+# This avoids running processes as root.
+RUN addgroup -g ${USER_GID} ${USERNAME} && \
+    adduser -D -u ${USER_UID} -G ${USERNAME} -h /home/${USERNAME} -s /bin/bash ${USERNAME}
+
+# Add the user to the docker group to allow interaction with the Docker daemon.
+RUN adduser ${USERNAME} docker
+
+# Grant passwordless sudo access to the user.
+RUN echo "${USERNAME} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# Switch to the newly created user.
+USER ${USERNAME}
+
+# Set user-specific environment variables.
+ENV HOME=/home/${USERNAME}
+ENV NPM_CONFIG_PREFIX=${HOME}/.npm-global
+ENV PATH=${NPM_CONFIG_PREFIX}/bin:${HOME}/.local/bin:/workspace/venv/bin:$PATH
+ENV VIRTUAL_ENV="/workspace/venv"
+
+# Install global npm packages for the LLM CLIs as the user.
+RUN npm install -g @anthropic-ai/claude-code @google/gemini-cli ccusage
+
+# Set a custom prompt to identify the container for interactive shells.
+RUN echo 'if [[ "$-" == *i* ]]; then export PS1="\[\033[01;32m\]${USERNAME}@${CONTAINER_NAME:-\h}\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "; fi' >> ${HOME}/.bashrc
+
+# Set the default working directory inside the container.
+WORKDIR /workspace
+
+# Copy the local workspace directory into the container.
+# The --chown flag ensures the user has ownership of the files.
+COPY --chown=${USERNAME}:${USERNAME} workspace/ /workspace/
+
+# Create a Python virtual environment for dependency management.
+RUN python3 -m venv /workspace/venv
+
+# Set the default command to launch a bash shell when the container starts.
+CMD ["/bin/bash"]
+
