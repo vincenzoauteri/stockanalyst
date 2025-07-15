@@ -797,3 +797,38 @@ def test_api_v2_all_endpoints_exception_handling(client, logged_in_client):
             data = json.loads(response.data)
             assert not data['success'], f"Endpoint {endpoint} should return success=False"
             assert 'error' in data, f"Endpoint {endpoint} should include error message"
+
+def test_api_v2_get_symbols(client):
+    """Test the symbols endpoint for stock comparison feature"""
+    with patch('api_routes.get_stock_service') as mock_get_service:
+        mock_stock_service = MagicMock()
+        mock_stock_service.db_manager.get_sp500_symbols.return_value = [
+            'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA'
+        ]
+        mock_get_service.return_value = mock_stock_service
+        
+        response = client.get('/api/v2/symbols')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data['success'] == True
+        assert 'data' in data
+        assert len(data['data']) == 5
+        assert 'AAPL' in data['data']
+        assert 'count' in data
+        assert data['count'] == 5
+
+def test_api_v2_get_symbols_error(client):
+    """Test symbols endpoint error handling"""
+    with patch('api_routes.get_stock_service') as mock_get_service:
+        mock_stock_service = MagicMock()
+        mock_stock_service.db_manager.get_sp500_symbols.side_effect = Exception("Database error")
+        mock_get_service.return_value = mock_stock_service
+        
+        response = client.get('/api/v2/symbols')
+        
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert data['success'] == False
+        assert 'error' in data
+        assert 'message' in data
