@@ -1,0 +1,60 @@
+name: Claude Auto Issue Handler
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto-implement:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "Claude Code Bot"
+          git config user.email "noreply@anthropic.com"
+
+      - name: Automatic Issue Implementation
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          timeout_minutes: "120"
+          direct_prompt: |
+            Review this issue carefully. Create a new branch to work on, make an implementation plan and use it to solve the issue. Once you are confident with the change, commit the branch, push it and create a pull request.
+            
+            Issue Details:
+            - Title: ${{ github.event.issue.title }}
+            - Body: ${{ github.event.issue.body }}
+            - Issue Number: #${{ github.event.issue.number }}
+            - Author: @${{ github.event.issue.user.login }}
+            
+            Instructions:
+            1. Analyze the issue thoroughly and understand the requirements
+            2. Create a new branch named "issue-${{ github.event.issue.number }}-implementation"
+            3. Create a detailed implementation plan using the TodoWrite tool
+            4. Implement the solution following the project's coding standards and patterns
+            5. Test your implementation thoroughly
+            6. Run linting and type checking if applicable
+            7. Commit your changes with a clear, descriptive commit message
+            8. Push the branch to the remote repository
+            9. Create a pull request that references the original issue
+            
+            Guidelines:
+            - Follow the existing code style and architecture patterns
+            - Include appropriate tests if the feature requires testing
+            - Update documentation if necessary
+            - Ensure the solution is complete and production-ready
+            - Use the project's established tools and frameworks
+            - Reference the original issue in your pull request (Closes #${{ github.event.issue.number }})
+            
+            If you encounter any blockers or need clarification, create a comment on the issue explaining what additional information is needed.
