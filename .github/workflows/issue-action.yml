@@ -20,12 +20,23 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git
+        shell: bash
         run: |
           git config user.name "Claude Code Bot"
           git config user.email "noreply@anthropic.com"
 
+      - name: Setup Environment
+        shell: bash
+        run: |
+          echo "Setting up environment for Claude Code"
+          which bash
+          echo "PATH=$PATH" >> $GITHUB_ENV
+          echo "SHELL=/bin/bash" >> $GITHUB_ENV
+
       - name: Automatic Issue Implementation
         uses: anthropics/claude-code-action@beta
+        env:
+          SHELL: /bin/bash
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           timeout_minutes: "120"
