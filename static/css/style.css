@@ -203,28 +203,11 @@ body {
 /* Search and Filter */
 .form-control, .form-select {
     border-radius: 6px;
-    border: 1px solid #ced4da;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .form-control:focus, .form-select:focus {
-    border-color: var(--secondary-color);
     box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
-}
-
-/* Dark mode form controls */
-[data-theme="dark"] .form-control,
-[data-theme="dark"] .form-select {
-    background-color: var(--light-card-bg);
-    border-color: #495057;
-    color: var(--light-text);
-}
-
-[data-theme="dark"] .form-control:focus,
-[data-theme="dark"] .form-select:focus {
-    background-color: var(--light-card-bg);
-    border-color: var(--secondary-color);
-    color: var(--light-text);
 }
 
 /* Tab Navigation */
