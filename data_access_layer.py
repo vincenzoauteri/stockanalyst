@@ -1122,6 +1122,7 @@ class StockDataService:
         Returns:
             List of dictionaries containing comparison data for each stock
         """
+        logger.info(f"Getting stock comparison for symbols: {symbols}")
         try:
             with self.db_manager.engine.connect() as conn:
                 # Build query for multiple symbols
@@ -1176,8 +1177,10 @@ class StockDataService:
                     ORDER BY s.symbol
                 """)
                 
+                logger.debug(f"Executing query with params: {params}")
                 result = conn.execute(query, params)
                 rows = result.fetchall()
+                logger.info(f"Query returned {len(rows)} rows")
                 
                 comparison_data = []
                 for row in rows:
@@ -1254,6 +1257,7 @@ class StockDataService:
                     
                     comparison_data.append(stock_data)
                 
+                logger.info(f"Returning {len(comparison_data)} stocks for comparison")
                 return comparison_data
                 
         except Exception as e:

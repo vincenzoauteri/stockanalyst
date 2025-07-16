@@ -451,19 +451,7 @@ function addStockInput(selectedSymbol = '') {
                        oninput="handleStockInput(this, ${stockCount})"
                        onblur="hideAutocomplete(${stockCount})"
                        onfocus="showAutocomplete(${stockCount})">
-                <div class="autocomplete-list" id="autocomplete${stockCount}" style="
-                    position: absolute;
-                    top: 100%;
-                    left: 0;
-                    right: 0;
-                    background: white;
-                    border: 1px solid #dee2e6;
-                    border-top: none;
-                    max-height: 200px;
-                    overflow-y: auto;
-                    z-index: 1000;
-                    display: none;
-                "></div>
+                <div class="autocomplete-list" id="autocomplete${stockCount}"></div>
             </div>
         </div>
         <div class="col-md-6 d-flex align-items-end">
@@ -561,10 +549,7 @@ function handleStockInput(input, rowNumber) {
     // Generate autocomplete items
     const items = matches.map(symbol => 
         `<div class="autocomplete-item" 
-              style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f1f1f1;"
-              onmousedown="selectSymbol('${symbol}', ${rowNumber})"
-              onmouseover="this.style.backgroundColor='#f8f9fa'"
-              onmouseout="this.style.backgroundColor='white'">
+              onmousedown="selectSymbol('${symbol}', ${rowNumber})">
             ${symbol}
         </div>`
     ).join('');
