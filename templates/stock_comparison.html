@@ -53,7 +53,7 @@
                     <div class="row mt-3">
                         <div class="col-12">
                             <small class="form-text text-muted">
-                                Select 2-5 S&P 500 stocks to compare. Use the dropdown to select valid symbols.
+                                Select 2-5 S&P 500 stocks to compare. Type stock symbols (e.g., AAPL, MSFT) and select from the autocomplete suggestions.
                             </small>
                         </div>
                     </div>
@@ -381,8 +381,8 @@ let availableSymbols = [];
 const maxStocks = 5;
 
 // Load S&P 500 symbols when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    loadSymbols();
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadSymbols();
     initializeStocks();
 });
 
@@ -392,11 +392,16 @@ async function loadSymbols() {
         const data = await response.json();
         if (data.success) {
             availableSymbols = data.data.sort();
+            console.log(`Loaded ${availableSymbols.length} stock symbols`);
         } else {
             console.error('Failed to load symbols:', data.message);
+            // Fallback to empty array to prevent errors
+            availableSymbols = [];
         }
     } catch (error) {
         console.error('Error loading symbols:', error);
+        // Fallback to empty array to prevent errors
+        availableSymbols = [];
     }
 }
 
@@ -436,12 +441,30 @@ function addStockInput(selectedSymbol = '') {
     row.innerHTML = `
         <div class="col-md-6">
             <label for="stock${stockCount}" class="form-label">Stock ${stockCount}:</label>
-            <select class="form-select stock-select" id="stock${stockCount}" onchange="updateSymbols()">
-                <option value="">Select a stock symbol...</option>
-                ${availableSymbols.map(symbol => 
-                    `<option value="${symbol}" ${symbol === selectedSymbol ? 'selected' : ''}>${symbol}</option>`
-                ).join('')}
-            </select>
+            <div class="autocomplete-container" style="position: relative;">
+                <input type="text" 
+                       class="form-control stock-input" 
+                       id="stock${stockCount}" 
+                       placeholder="Type stock symbol (e.g., AAPL, MSFT)..."
+                       value="${selectedSymbol}"
+                       autocomplete="off"
+                       oninput="handleStockInput(this, ${stockCount})"
+                       onblur="hideAutocomplete(${stockCount})"
+                       onfocus="showAutocomplete(${stockCount})">
+                <div class="autocomplete-list" id="autocomplete${stockCount}" style="
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                    background: white;
+                    border: 1px solid #dee2e6;
+                    border-top: none;
+                    max-height: 200px;
+                    overflow-y: auto;
+                    z-index: 1000;
+                    display: none;
+                "></div>
+            </div>
         </div>
         <div class="col-md-6 d-flex align-items-end">
             <button type="button" class="btn btn-outline-danger" onclick="removeStockInput(${stockCount})">
@@ -486,12 +509,12 @@ function updateCompareButtonState() {
 }
 
 function getSelectedSymbols() {
-    const selects = document.querySelectorAll('.stock-select');
+    const inputs = document.querySelectorAll('.stock-input');
     const symbols = [];
     
-    selects.forEach(select => {
-        if (select.value) {
-            symbols.push(select.value);
+    inputs.forEach(input => {
+        if (input.value && input.value.trim()) {
+            symbols.push(input.value.trim().toUpperCase());
         }
     });
     
@@ -513,6 +536,69 @@ function clearAllStocks() {
     updateCompareButtonState();
 }
 
+// Autocomplete functionality
+function handleStockInput(input, rowNumber) {
+    const query = input.value.trim().toUpperCase();
+    const autocompleteDiv = document.getElementById(`autocomplete${rowNumber}`);
+    
+    if (query.length === 0) {
+        autocompleteDiv.style.display = 'none';
+        updateSymbols();
+        return;
+    }
+    
+    // Filter symbols that start with or contain the query
+    const matches = availableSymbols.filter(symbol => 
+        symbol.startsWith(query) || symbol.includes(query)
+    ).slice(0, 10); // Limit to 10 results
+    
+    if (matches.length === 0) {
+        autocompleteDiv.style.display = 'none';
+        updateSymbols();
+        return;
+    }
+    
+    // Generate autocomplete items
+    const items = matches.map(symbol => 
+        `<div class="autocomplete-item" 
+              style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f1f1f1;"
+              onmousedown="selectSymbol('${symbol}', ${rowNumber})"
+              onmouseover="this.style.backgroundColor='#f8f9fa'"
+              onmouseout="this.style.backgroundColor='white'">
+            ${symbol}
+        </div>`
+    ).join('');
+    
+    autocompleteDiv.innerHTML = items;
+    autocompleteDiv.style.display = 'block';
+    
+    updateSymbols();
+}
+
+function selectSymbol(symbol, rowNumber) {
+    const input = document.getElementById(`stock${rowNumber}`);
+    input.value = symbol;
+    hideAutocomplete(rowNumber);
+    updateSymbols();
+}
+
+function showAutocomplete(rowNumber) {
+    const input = document.getElementById(`stock${rowNumber}`);
+    if (input.value.trim().length > 0) {
+        handleStockInput(input, rowNumber);
+    }
+}
+
+function hideAutocomplete(rowNumber) {
+    // Add a small delay to allow clicking on autocomplete items
+    setTimeout(() => {
+        const autocompleteDiv = document.getElementById(`autocomplete${rowNumber}`);
+        if (autocompleteDiv) {
+            autocompleteDiv.style.display = 'none';
+        }
+    }, 150);
+}
+
 // Form submission handler
 document.getElementById('comparisonForm').addEventListener('submit', function(e) {
     const symbols = getSelectedSymbols();
@@ -527,6 +613,14 @@ document.getElementById('comparisonForm').addEventListener('submit', function(e)
     if (uniqueSymbols.length !== symbols.length) {
         e.preventDefault();
         alert('Please select different stocks. Duplicate symbols are not allowed.');
+        return;
+    }
+    
+    // Validate that all symbols exist in availableSymbols
+    const invalidSymbols = uniqueSymbols.filter(symbol => !availableSymbols.includes(symbol));
+    if (invalidSymbols.length > 0) {
+        e.preventDefault();
+        alert(`Invalid stock symbols: ${invalidSymbols.join(', ')}. Please select valid S&P 500 symbols.`);
         return;
     }
     
